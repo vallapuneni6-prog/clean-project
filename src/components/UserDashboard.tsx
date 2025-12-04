@@ -65,6 +65,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     const [previewOutlet, setPreviewOutlet] = useState<Outlet | null>(null);
     const [showHistory, setShowHistory] = useState<string | null>(null);
     const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+    
+    // WhatsApp preview state
+    const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
+    const [whatsAppImageData, setWhatsAppImageData] = useState<string | null>(null);
+    const [whatsAppPackage, setWhatsAppPackage] = useState<CustomerPackage | null>(null);
 
     const messageStyles = {
         success: 'bg-green-100 border border-green-400 text-green-700',
@@ -246,18 +251,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
                         console.log('Invoice image generated successfully');
 
-                        // Share via WhatsApp
-                        const whatsappUrl = `https://wa.me/91${assignForm.customerMobile}?text=Your%20package%20has%20been%20assigned.%20Please%20check%20the%20image%20below%20for%20details.`;
-
-                        // Copy image to clipboard and show sharing option
-                        const blob = await (await fetch(invoiceImage)).blob();
-                        const data = [new ClipboardItem({ 'image/png': blob })];
-
-                        await navigator.clipboard.write(data);
-                        showMessage('Invoice image copied! Open WhatsApp to share.', 'success');
-
-                        // Open WhatsApp
-                        window.open(whatsappUrl, '_blank');
+                        // Show preview modal instead of directly opening WhatsApp
+                        setWhatsAppImageData(invoiceImage);
+                        setWhatsAppPackage(newPackage);
+                        setShowWhatsAppPreview(true);
                     } catch (error) {
                         console.error('Error generating or sharing invoice:', error);
                         showMessage('Package assigned! (Could not generate invoice)', 'success');
@@ -534,6 +531,43 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
     };
 
+    const handleWhatsAppPreview = async (pkg: CustomerPackage, template: PackageTemplate, outlet: Outlet) => {
+        try {
+            const invoiceImage = await generateBrandedPackageInvoiceImage(pkg, template, outlet, []);
+            setWhatsAppImageData(invoiceImage);
+            setWhatsAppPackage(pkg);
+            setShowWhatsAppPreview(true);
+        } catch (error) {
+            console.error('Error generating preview:', error);
+            showMessage('Error generating invoice preview', 'error');
+        }
+    };
+
+    const handleShareFromWhatsAppPreview = async () => {
+        if (!whatsAppImageData || !whatsAppPackage) return;
+
+        try {
+            // Copy image to clipboard
+            const blob = await (await fetch(whatsAppImageData)).blob();
+            const data = [new ClipboardItem({ 'image/png': blob })];
+
+            await navigator.clipboard.write(data);
+            showMessage('Invoice image copied to clipboard!', 'success');
+
+            // Close preview
+            setShowWhatsAppPreview(false);
+            setWhatsAppImageData(null);
+            setWhatsAppPackage(null);
+
+            // Open WhatsApp
+            const whatsappUrl = `https://wa.me/91${whatsAppPackage.customerMobile}?text=Your%20package%20invoice%20has%20been%20copied.%20Please%20paste%20it%20in%20this%20chat.`;
+            window.open(whatsappUrl, '_blank');
+        } catch (error) {
+            console.error('Error sharing invoice:', error);
+            showMessage('Error sharing invoice', 'error');
+        }
+    };
+
     // Fetch and show redeem history
     const showRedeemHistory = async (packageId: string) => {
         try {
@@ -640,7 +674,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                         : 'border-transparent text-gray-600 hover:text-gray-900'
                         }`}
                 >
-                    Vouchers
+                    Redeem Package
                 </button>
             </div>
 
@@ -963,68 +997,70 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     </div>
                 )}
 
-                {/* All Customer Packages Table */}
-                <div className="bg-white rounded-lg border border-gray-200 p-8 mt-8">
-                    <h2 className="text-2xl font-bold mb-6 text-gray-900">All Customer Packages</h2>
-                    {customerPackages.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">No customer packages available</p>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full border-collapse">
-                                <thead>
-                                    <tr className="bg-gray-100 border-b-2 border-gray-300">
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Value</th>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
-                                        <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {customerPackages.map((pkg) => {
-                                        const template = packages.find(p => p.id === pkg.packageTemplateId);
-                                        return (
-                                            <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                                <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
-                                                <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
-                                                <td className="px-4 py-4 text-sm text-gray-600">
-                                                    {template ? `Pay ₹${template.packageValue} Get ₹${template.serviceValue}` : 'N/A'}
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-right">
-                                                    <span className="font-semibold text-green-600">₹{pkg.remainingServiceValue.toFixed(2)}</span>
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-gray-600">
-                                                    {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-center space-x-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (template && outlets.find(o => o.id === userOutletId)) {
-                                                                previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
-                                                            }
-                                                        }}
-                                                        className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                    >
-                                                        View Invoice
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => showRedeemHistory(pkg.id)}
-                                                        className="px-3 py-1 bg-gray-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                    >
-                                                        History
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
+                {/* All Customer Packages Table - Assign Tab */}
+                {activeTab === 'assign' && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 mt-8">
+                        <h2 className="text-2xl font-bold mb-6 text-gray-900">All Customer Packages</h2>
+                        {customerPackages.length === 0 ? (
+                            <p className="text-gray-500 text-center py-8">No customer packages available</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
+                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
+                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package</th>
+                                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Value</th>
+                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
+                                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {customerPackages.map((pkg) => {
+                                            const template = packages.find(p => p.id === pkg.packageTemplateId);
+                                            return (
+                                                <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                    <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-600">
+                                                        {template ? `Pay ₹${template.packageValue} Get ₹${template.serviceValue}` : 'N/A'}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-right">
+                                                        <span className="font-semibold text-green-600">₹{pkg.remainingServiceValue.toFixed(2)}</span>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-gray-600">
+                                                        {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-center space-x-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (template && outlets.find(o => o.id === userOutletId)) {
+                                                                    previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                        >
+                                                            View Invoice
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => showRedeemHistory(pkg.id)}
+                                                            className="px-3 py-1 bg-gray-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                        >
+                                                            History
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Redeem Services Tab */}
                 {activeTab === 'redeem' && (
@@ -1036,7 +1072,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                     onClick={() => setShowRedeemForm(true)}
                                     className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
                                 >
-                                    Redeem Services
+                                    + Redeem Package
                                 </button>
                             </div>
                         ) : (
@@ -1455,6 +1491,51 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                     setHistoryRecords([]);
                                 }}
                                 className="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 transition-opacity"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* WhatsApp Preview Modal */}
+            {showWhatsAppPreview && whatsAppImageData && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+                            <h2 className="text-2xl font-bold text-gray-900">Invoice Preview</h2>
+                            <button
+                                onClick={() => {
+                                    setShowWhatsAppPreview(false);
+                                    setWhatsAppImageData(null);
+                                    setWhatsAppPackage(null);
+                                }}
+                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <img src={whatsAppImageData} alt="Invoice Preview" className="w-full border border-gray-200 rounded" />
+                        </div>
+                        <div className="bg-gray-50 border-t border-gray-200 p-4 flex gap-3">
+                            <button
+                                onClick={handleShareFromWhatsAppPreview}
+                                className="flex-1 bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-4.998 1.526 9.872 9.872 0 00-3.605 3.602 9.871 9.871 0 001.359 12.405 9.87 9.87 0 0012.406-1.36 9.873 9.873 0 00-4.159-15.169m0-2.452a12.324 12.324 0 0112.324 12.324c0 6.798-5.526 12.324-12.324 12.324C6.797 24 1.47 18.474 1.47 11.677 1.47 5.379 6.998 0 12.051 0z" />
+                                </svg>
+                                Share via WhatsApp
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowWhatsAppPreview(false);
+                                    setWhatsAppImageData(null);
+                                    setWhatsAppPackage(null);
+                                }}
+                                className="flex-1 bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 transition-opacity"
                             >
                                 Close
                             </button>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PackageTemplate, CustomerPackage, Outlet, User } from '../types';
 import { useNotification } from '../hooks/useNotification';
 import { NotificationContainer } from './NotificationContainer';
+import { generateBrandedPackageInvoiceImage } from './downloadBrandedPackage';
 
 interface PackagesProps {
   currentUser?: User;
@@ -18,6 +19,10 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'outlet' | 'date' | 'month'>('month');
   const [selectedOutletFilter, setSelectedOutletFilter] = useState<string>('all');
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewPackage, setPreviewPackage] = useState<CustomerPackage | null>(null);
+  const [packageImageData, setPackageImageData] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'assign' | 'redeem'>('redeem');
 
   const { notifications, addNotification, removeNotification } = useNotification();
 
@@ -140,6 +145,18 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
     window.URL.revokeObjectURL(url);
   };
 
+  const handleSharePackagePreview = () => {
+    if (!previewPackage) return;
+    
+    const phoneNumber = previewPackage.customerMobile.startsWith('91') 
+      ? previewPackage.customerMobile 
+      : '91' + previewPackage.customerMobile;
+    window.open(`https://api.whatsapp.com/send?phone=${phoneNumber}`, '_blank');
+    setShowPreviewModal(false);
+    setPreviewPackage(null);
+    setPackageImageData(null);
+  };
+
 
 
   if (loading) {
@@ -155,7 +172,34 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
         <h1 className="text-3xl font-bold text-gray-900">Packages</h1>
       </div>
 
-      {/* Controls Section */}
+      {/* Action Tabs */}
+      <div className="flex gap-4">
+        <button
+          onClick={() => setActiveTab('assign')}
+          className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+            activeTab === 'assign'
+              ? 'bg-gray-200 text-gray-900'
+              : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Assign Package
+        </button>
+        <button
+          onClick={() => setActiveTab('redeem')}
+          className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+            activeTab === 'redeem'
+              ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white'
+              : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Redeem Package
+        </button>
+      </div>
+
+      {/* Redeem Package Content */}
+      {activeTab === 'redeem' && (
+        <>
+          {/* Controls Section */}
       <div className="bg-white border border-gray-300 rounded-lg p-4 flex flex-wrap items-center gap-4">
         {/* Outlet Filter */}
         {(isAdmin || isSuperAdmin) && (
@@ -219,6 +263,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
                     <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Outlet</th>
                     <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Assigned Date</th>
                     <th className="px-6 py-3 text-right text-sm font-bold text-gray-900">Remaining Value</th>
+                    <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -232,6 +277,31 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
                          {pkg.assignedDate ? new Date(pkg.assignedDate).toLocaleDateString() : 'N/A'}
                        </td>
                        <td className="px-6 py-4 text-sm font-bold text-green-600 text-right">₹{(pkg.remainingServiceValue || 0).toLocaleString()}</td>
+                       <td className="px-6 py-4 text-center">
+                         <button
+                           onClick={async () => {
+                             const template = templates.find(t => t.id === pkg.packageTemplateId);
+                             const outlet = outlets.find(o => o.id === pkg.outletId);
+                             if (template && outlet) {
+                               const imageData = await generateBrandedPackageInvoiceImage(
+                                 pkg,
+                                 template,
+                                 outlet,
+                                 []
+                               );
+                               if (imageData) {
+                                 setPackageImageData(imageData);
+                                 setPreviewPackage(pkg);
+                                 setShowPreviewModal(true);
+                               }
+                             }
+                           }}
+                           className="text-green-600 hover:text-green-800 text-sm font-medium"
+                           title="Share via WhatsApp"
+                         >
+                           WhatsApp
+                         </button>
+                       </td>
                      </tr>
                    ))}
                  </tbody>
@@ -243,6 +313,57 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
             </div>
           )}
           </div>
-          </div>
-          );
-          };
+
+          {/* Package Preview Modal for WhatsApp */}
+          {showPreviewModal && packageImageData && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-brand-surface rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold text-brand-text-primary">Package Preview</h3>
+                  <button
+                    onClick={() => {
+                      setShowPreviewModal(false);
+                      setPreviewPackage(null);
+                      setPackageImageData(null);
+                    }}
+                    className="text-brand-text-secondary hover:text-brand-text-primary text-2xl font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Package Image */}
+                <div className="mb-6 border border-brand-border rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+                  <img src={packageImageData} alt="Package Preview" style={{ maxWidth: '100%', height: 'auto' }} />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSharePackagePreview}
+                    className="flex-1 bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-semibold py-3 px-4 rounded-lg hover:opacity-90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-4.998 1.526 9.872 9.872 0 00-3.605 3.602 9.871 9.871 0 001.359 12.405 9.87 9.87 0 0012.406-1.36 9.873 9.873 0 00-4.159-15.169m0-2.452a12.324 12.324 0 0112.324 12.324c0 6.798-5.526 12.324-12.324 12.324C6.797 24 1.47 18.474 1.47 11.677 1.47 5.379 6.998 0 12.051 0z" />
+                    </svg>
+                    Share via WhatsApp
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPreviewModal(false);
+                      setPreviewPackage(null);
+                      setPackageImageData(null);
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-brand-text-primary font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+            )}
+            </>
+            )}
+            </div>
+            );
+            };

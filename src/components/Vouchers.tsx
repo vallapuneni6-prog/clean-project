@@ -20,10 +20,11 @@ export const Vouchers: React.FC = () => {
   const [voucherImageCopied, setVoucherImageCopied] = useState(false);
   const [successData, setSuccessData] = useState({ voucherId: '', recipientName: '', customerName: '', recipientMobile: '' });
   const [issueFormData, setIssueFormData] = useState({
-    customerName: '',
+    referringCustomerName: '',
     friendsName: '',
     friendsMobile: '',
-    billNo: ''
+    billNo: '',
+    recipientName: ''
   });
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
@@ -254,12 +255,12 @@ export const Vouchers: React.FC = () => {
     validTill.setDate(validTill.getDate() + 15);
     const formattedValidTill = validTill.toLocaleDateString('en-IN');
     
-    const customerName = successData.customerName || 'Your friend';
+    const referringName = successData.customerName || 'Your friend';
     const friendName = successData.recipientName;
     
     return `Hi *${friendName}*,
 
-  Your friend *${customerName}* recently visited Naturals Salon - *Madinaguda* and thought you'd love the experience too!
+  Your friend *${referringName}* recently visited Naturals Salon - *Madinaguda* and thought you'd love the experience too!
 
   We've reserved a special voucher just for you — make sure to use it before *${formattedValidTill}* and enjoy an exclusive pampering session at your nearest Naturals Salon.
 
@@ -340,9 +341,9 @@ export const Vouchers: React.FC = () => {
   };
 
   const handleIssueVoucher = async () => {
-    const { customerName, friendsMobile, billNo } = issueFormData;
+    const { referringCustomerName, friendsName, friendsMobile, billNo } = issueFormData;
     
-    if (!customerName || !friendsMobile || !billNo) {
+    if (!referringCustomerName || !friendsName || !friendsMobile || !billNo) {
       addNotification('Please fill all fields', 'warning');
       return;
     }
@@ -368,7 +369,7 @@ export const Vouchers: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create',
-          recipientName: customerName,
+          recipientName: friendsName,
           recipientMobile: friendsMobile,
           outletCode: outlets[0].code,
           expiryDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -382,13 +383,13 @@ export const Vouchers: React.FC = () => {
         const data = await response.json();
         setSuccessData({ 
            voucherId: data.id.toUpperCase(), 
-           recipientName: customerName, 
-           customerName: customerName,
+           recipientName: friendsName, 
+           customerName: referringCustomerName,
            recipientMobile: friendsMobile
          });
          setShowSuccessSection(true);
          setShowIssueForm(false);
-         setIssueFormData({ customerName: '', friendsName: '', friendsMobile: '', billNo: '' });
+         setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
         addNotification('Voucher issued successfully!', 'success');
         await loadData();
       } else {
@@ -453,7 +454,7 @@ export const Vouchers: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowIssueForm(false);
-                    setIssueFormData({ customerName: '', friendsName: '', friendsMobile: '', billNo: '' });
+                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
                   }}
                   className="text-gray-500 hover:text-gray-700 text-2xl"
                 >
@@ -462,6 +463,28 @@ export const Vouchers: React.FC = () => {
               </div>
                 
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Customer Name (Referring) *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter customer name who is referring"
+                    value={issueFormData.referringCustomerName}
+                    onChange={(e) => setIssueFormData({ ...issueFormData, referringCustomerName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Friend's Name *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter friend's name"
+                    value={issueFormData.friendsName}
+                    onChange={(e) => setIssueFormData({ ...issueFormData, friendsName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Friends Mobile No *</label>
                   <input
@@ -475,27 +498,22 @@ export const Vouchers: React.FC = () => {
                   {isLookingUpCustomer && <p className="text-sm text-gray-500 mt-1">Looking up customer...</p>}
                 </div>
                 
-                <input
-                  type="text"
-                  placeholder="Customer Name (Auto-populated)"
-                  value={issueFormData.customerName}
-                  onChange={(e) => setIssueFormData({ ...issueFormData, customerName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
-                />
-                
-                <input
-                  type="text"
-                  placeholder="Bill No"
-                  value={issueFormData.billNo}
-                  onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
-                />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bill No *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter bill number"
+                    value={issueFormData.billNo}
+                    onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
+                  />
+                </div>
               </div>
               
               <div className="flex gap-4 mt-8">
                 <button
                   onClick={() => {
-                    setIssueFormData({ customerName: '', friendsName: '', friendsMobile: '', billNo: '' });
+                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
                   }}
                   className="flex-1 px-6 py-3 bg-gray-200 text-gray-900 font-bold rounded-lg hover:bg-gray-300 transition-colors"
                 >
@@ -592,17 +610,19 @@ export const Vouchers: React.FC = () => {
                 {/* Voucher Card */}
                 <div id="voucher-preview-card" className="rounded-lg mb-6 flex gap-0 overflow-hidden shadow-lg">
                   {/* Left Side - Brand Info - Light Pink Background */}
-                  <div className="flex-1 bg-gradient-to-b from-pink-50 to-rose-50 p-8 flex flex-col justify-between">
-                    <div>
+                  <div className="flex-1 bg-gradient-to-b from-pink-50 to-rose-50 p-8 flex flex-col justify-between items-center">
+                    <div className="text-center">
                       <img src="/logo.png" alt="Naturals Logo" className="h-16 mb-4" />
-                      <p className="text-gray-800 font-bold text-lg mb-8">Madinaguda</p>
+                      <p className="text-gray-800 font-bold text-lg">Madinaguda</p>
                     </div>
-                    <div className="text-left">
-                      <p className="text-gray-700 text-sm font-bold mb-2">SPECIAL DISCOUNT</p>
-                      <p className="text-7xl font-black text-amber-500">35<span className="text-5xl">%</span></p>
-                      <p className="text-4xl text-gray-900 font-black">OFF</p>
+                    
+                    {/* Big Discount Centered in Pink Section */}
+                    <div className="text-center flex items-baseline gap-3 -mt-12">
+                      <p className="text-7xl font-black text-amber-600">35<span className="text-5xl">%</span></p>
+                      <p className="text-5xl text-gray-900 font-black">OFF</p>
                     </div>
-                    <p className="text-xs text-gray-700 mt-4">
+                    
+                    <p className="text-xs text-gray-700 text-center">
                       • Voucher not applicable on Hair Treatments & Bridal makeup. Voucher Valid only at Store issued, please take prior appointment for service
                     </p>
                   </div>
@@ -615,6 +635,7 @@ export const Vouchers: React.FC = () => {
                         This exclusive treat awaits you — courtesy of someone who cares.
                       </p>
                     </div>
+                    
                     <div className="space-y-4 text-sm">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-gray-900">GUEST NAME:</span>
