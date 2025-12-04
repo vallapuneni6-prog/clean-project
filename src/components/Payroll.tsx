@@ -11,6 +11,7 @@ interface PayrollData {
   attendance: number;
   leaves: number;
   extraDays: number;
+  otHours: number;
   ot: number;
   incentive: number;
   advance: number;
@@ -76,10 +77,9 @@ export const Payroll: React.FC<PayrollProps> = ({ currentUser, outlets = [] }) =
     setEditingStaffId(staff.staffId);
     setEditForm({
       staffId: staff.staffId,
-      extraDays: staff.extraDays,
-      ot: staff.ot,
-      incentive: staff.incentive,
-      advance: staff.advance
+      extraDays: staff.extraDays || 0,
+      incentive: staff.incentive || 0,
+      advance: staff.advance || 0
     });
   };
 
@@ -95,7 +95,6 @@ export const Payroll: React.FC<PayrollProps> = ({ currentUser, outlets = [] }) =
           month: selectedMonth,
           staffId: editingStaffId,
           extraDays: editForm.extraDays || 0,
-          ot: editForm.ot || 0,
           incentive: editForm.incentive || 0,
           advance: editForm.advance || 0
         })
@@ -174,12 +173,12 @@ export const Payroll: React.FC<PayrollProps> = ({ currentUser, outlets = [] }) =
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Staff Name</th>
-                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Phone</th>
                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Salary</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Attendance</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Leaves</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Extra Days</th>
-                   <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">OT</th>
+                   <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">OT Hours</th>
+                   <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">OT Amount</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Incentive</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Advance</th>
                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase">Leave Ded.</th>
@@ -194,44 +193,44 @@ export const Payroll: React.FC<PayrollProps> = ({ currentUser, outlets = [] }) =
                       // Edit Mode
                       <>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">{staff.staffName}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{staff.phone || '-'}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{staff.salary.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900">{staff.attendance}</td>
                         <td className="px-6 py-4 text-center text-sm text-gray-600">{staff.leaves.toFixed(1)}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center">
                           <input
-                            type="number"
-                            min="0"
-                            value={editForm.extraDays || 0}
-                            onChange={(e) => setEditForm({ ...editForm, extraDays: parseFloat(e.target.value) })}
-                            className="w-full bg-gray-100 text-gray-900 px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                            type="text"
+                            value={editForm.extraDays ?? 0}
+                            onChange={(e) => setEditForm({ ...editForm, extraDays: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-3 py-2 text-base font-semibold text-center bg-white text-gray-900 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center">
                           <input
-                            type="number"
-                            min="0"
-                            value={editForm.ot || 0}
-                            onChange={(e) => setEditForm({ ...editForm, ot: parseFloat(e.target.value) })}
-                            className="w-full bg-gray-100 text-gray-900 px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                            type="text"
+                            value={staff.otHours ?? 0}
+                            disabled
+                            className="w-20 px-3 py-2 text-base font-semibold text-center bg-gray-100 text-gray-600 rounded border border-gray-300 cursor-not-allowed"
+                            placeholder="0"
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center text-sm font-semibold text-blue-600">₹{staff.ot.toLocaleString('en-IN')}</td>
+                        <td className="px-6 py-4 text-center">
                           <input
-                            type="number"
-                            min="0"
-                            value={editForm.incentive || 0}
-                            onChange={(e) => setEditForm({ ...editForm, incentive: parseFloat(e.target.value) })}
-                            className="w-full bg-gray-100 text-gray-900 px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                            type="text"
+                            value={editForm.incentive ?? 0}
+                            onChange={(e) => setEditForm({ ...editForm, incentive: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-3 py-2 text-base font-semibold text-center bg-white text-gray-900 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center">
                           <input
-                            type="number"
-                            min="0"
-                            value={editForm.advance || 0}
-                            onChange={(e) => setEditForm({ ...editForm, advance: parseFloat(e.target.value) })}
-                            className="w-full bg-gray-100 text-gray-900 px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                            type="text"
+                            value={editForm.advance ?? 0}
+                            onChange={(e) => setEditForm({ ...editForm, advance: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-3 py-2 text-base font-semibold text-center bg-white text-gray-900 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
                           />
                         </td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-red-600">₹{staff.leaveDeduction.toLocaleString('en-IN')}</td>
@@ -259,12 +258,12 @@ export const Payroll: React.FC<PayrollProps> = ({ currentUser, outlets = [] }) =
                       // View Mode
                       <>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">{staff.staffName}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{staff.phone || '-'}</td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{staff.salary.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900">{staff.attendance}</td>
                         <td className="px-6 py-4 text-center text-sm text-gray-600">{staff.leaves.toFixed(1)}</td>
                         <td className="px-6 py-4 text-center text-sm text-gray-600">{staff.extraDays.toFixed(1)}</td>
-                        <td className="px-6 py-4 text-center text-sm text-gray-600">{staff.ot.toFixed(1)}</td>
+                        <td className="px-6 py-4 text-center text-sm text-gray-600">{staff.otHours.toFixed(1)}</td>
+                        <td className="px-6 py-4 text-center text-sm font-semibold text-blue-600">₹{staff.ot.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-blue-600">₹{staff.incentive.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-red-600">₹{staff.advance.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4 text-center text-sm font-semibold text-red-600">₹{staff.leaveDeduction.toLocaleString('en-IN')}</td>

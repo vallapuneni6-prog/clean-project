@@ -18,6 +18,7 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
   const [editingStaff, setEditingStaff] = useState<any>(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [staffAttendance, setStaffAttendance] = useState<{ [staffId: string]: string }>({});
+  const [staffOT, setStaffOT] = useState<{ [staffId: string]: number }>({});
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -33,13 +34,16 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentUser]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const staffUrl = userOutletId ? `/api/staff?outletId=${userOutletId}` : '/api/staff';
       const salesUrl = userOutletId ? `/api/staff?action=sales&outletId=${userOutletId}` : '/api/staff?action=sales';
+      
+      console.log('Loading staff from:', staffUrl);
+      console.log('User outlet ID:', userOutletId);
       
       const [staffRes, salesRes] = await Promise.all([
         fetch(staffUrl),
@@ -48,10 +52,16 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
 
       if (staffRes.ok) {
         const staffData = await staffRes.json();
-        setStaff(staffData.map((s: any) => ({
+        console.log('Staff data loaded:', staffData);
+        const mappedStaff = staffData.map((s: any) => ({
           ...s,
           status: s.active ? 'Active' : 'Inactive'
-        })));
+        }));
+        console.log('Mapped staff:', mappedStaff);
+        console.log('Staff with Active status:', mappedStaff.filter((s: any) => s.status === 'Active'));
+        setStaff(mappedStaff);
+      } else {
+        console.error('Staff API error:', staffRes.status, staffRes.statusText);
       }
 
       if (salesRes.ok) {
@@ -224,7 +234,8 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
         .map(([staffId, status]) => ({
           staffId,
           date: attendanceDate,
-          status
+          status,
+          otHours: staffOT[staffId] || 0
         }));
 
       const response = await fetch('/api/staff-attendance', {
@@ -240,6 +251,7 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
         addNotification('Attendance recorded successfully', 'success');
         setShowAttendanceModal(false);
         setStaffAttendance({});
+        setStaffOT({});
         setAttendanceDate(new Date().toISOString().split('T')[0]);
       } else {
         const errorData = await response.json();
@@ -587,14 +599,14 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
               </div>
 
               <div>
-                <h4 className="text-lg font-bold text-gray-900 mb-4">Active Staff</h4>
-                {staff.filter(s => s.status === 'Active').length > 0 ? (
+                <h4 className="text-lg font-bold text-gray-900 mb-4">Active Staff (Outlet Specific)</h4>
+                {staff.filter(s => s.status === 'Active' && (!userOutletId || s.outletId === userOutletId)).length > 0 ? (
                   <div className="space-y-3">
                     {staff
-                      .filter(s => s.status === 'Active')
+                      .filter(s => s.status === 'Active' && (!userOutletId || s.outletId === userOutletId))
                       .map(staffMember => (
                         <div key={staffMember.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                          <div>
+                          <div className="flex-1">
                             <p className="font-semibold text-gray-900">{staffMember.name}</p>
                             <p className="text-sm text-gray-600">{staffMember.phone || 'No phone'}</p>
                           </div>
@@ -638,6 +650,20 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
                             >
                               🚫 Leave
                             </button>
+                          </div>
+                          <div className="flex gap-3 items-center ml-4">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-xs font-semibold text-gray-700">OT Hours</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={staffOT[staffMember.id] || 0}
+                                onChange={(e) => setStaffOT({ ...staffOT, [staffMember.id]: parseInt(e.target.value) || 0 })}
+                                placeholder="0"
+                                className="w-20 bg-white text-gray-900 px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-sm"
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}

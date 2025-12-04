@@ -75,6 +75,21 @@ function getPayrollData($pdo, $month, $outletId) {
     $endDate = date('Y-m-t', strtotime($startDate));
     $daysInMonth = (int)date('t', strtotime($startDate)); // Get actual number of days in month
     
+    // Calculate days worked till current date (or end of month if current month)
+    $today = new DateTime();
+    $endOfMonth = new DateTime($endDate);
+    $currentMonth = $year . '-' . $monthNum;
+    $todayMonth = $today->format('Y-m');
+    
+    if ($currentMonth === $todayMonth) {
+        // Current month - calculate till today
+        $calculationEndDate = min($today, $endOfMonth);
+        $daysWorkedTillDate = (int)$calculationEndDate->format('d');
+    } else {
+        // Past month - use full month
+        $daysWorkedTillDate = $daysInMonth;
+    }
+    
     // Get all active staff for the outlet
     $stmt = $pdo->prepare('
         SELECT id, name, phone, salary
@@ -126,6 +141,19 @@ function getPayrollData($pdo, $month, $outletId) {
             }
         }
         
+        // Calculate OT from attendance records (₹50 per hour)
+        $stmt = $pdo->prepare('
+            SELECT 
+                COALESCE(SUM(ot_hours), 0) as total_ot_hours
+            FROM staff_attendance
+            WHERE staff_id = ? 
+            AND attendance_date BETWEEN ? AND ?
+        ');
+        $stmt->execute([$staffId, $startDate, $endDate]);
+        $otResult = $stmt->fetch(PDO::FETCH_ASSOC);
+        $totalOtHours = (float)$otResult['total_ot_hours'] ?? 0;
+        $otFromAttendance = $totalOtHours * 50; // ₹50 per hour
+        
         // Get payroll adjustments
         $stmt = $pdo->prepare('
             SELECT 
@@ -141,15 +169,17 @@ function getPayrollData($pdo, $month, $outletId) {
         $adjustments = $stmt->fetch(PDO::FETCH_ASSOC);
         
         $extraDays = (float)$adjustments['extra_days'] ?? 0;
-        $ot = (float)$adjustments['ot'] ?? 0;
+        $otAdjustment = (float)$adjustments['ot'] ?? 0; // Manual OT adjustment
+        $ot = $otFromAttendance + $otAdjustment; // Combined OT (from attendance + manual adjustments)
         $incentive = (float)$adjustments['incentive'] ?? 0;
         $advance = (float)$adjustments['advance'] ?? 0;
         
         // Calculate salary to credit
         $salary = (float)$person['salary'];
         $dailyRate = $salary / $daysInMonth; // Daily rate based on actual days in month
+        $proRataSalary = $dailyRate * $daysWorkedTillDate; // Salary calculated till current date
         $leaveDeduction = $totalLeaveDays * $dailyRate; // Deduct based on leave days (counting weekend as 2)
-        $salaryToCredit = $salary + $incentive + $ot + $extraDays - $advance - $leaveDeduction;
+        $salaryToCredit = $proRataSalary + $incentive + $ot + $extraDays - $advance - $leaveDeduction;
         
         $payrollData[] = [
             'staffId' => $staffId,
@@ -159,6 +189,7 @@ function getPayrollData($pdo, $month, $outletId) {
             'attendance' => (int)$attendance,
             'leaves' => $totalLeaveDays,
             'extraDays' => $extraDays,
+            'otHours' => $totalOtHours,
             'ot' => $ot,
             'incentive' => $incentive,
             'advance' => $advance,
@@ -171,14 +202,13 @@ function getPayrollData($pdo, $month, $outletId) {
 }
 
 function updatePayroll($pdo, $data) {
-    if (!isset($data['month']) || !isset($data['staffId']) || !isset($data['extraDays']) || !isset($data['ot']) || !isset($data['incentive']) || !isset($data['advance'])) {
+    if (!isset($data['month']) || !isset($data['staffId']) || !isset($data['extraDays']) || !isset($data['incentive']) || !isset($data['advance'])) {
         throw new Exception('Missing required fields');
     }
     
     $month = $data['month'];
     $staffId = $data['staffId'];
     $extraDays = (float)$data['extraDays'];
-    $ot = (float)$data['ot'];
     $incentive = (float)$data['incentive'];
     $advance = (float)$data['advance'];
     
@@ -190,14 +220,13 @@ function updatePayroll($pdo, $data) {
     try {
         $pdo->beginTransaction();
         
-        // Delete existing adjustments for this staff/month
-        $stmt = $pdo->prepare('DELETE FROM staff_payroll_adjustments WHERE staff_id = ? AND month = ?');
+        // Delete existing adjustments for this staff/month (except OT - OT is calculated from attendance)
+        $stmt = $pdo->prepare('DELETE FROM staff_payroll_adjustments WHERE staff_id = ? AND month = ? AND type != "ot"');
         $stmt->execute([$staffId, $month]);
         
-        // Insert new adjustments
+        // Insert new adjustments (OT is now calculated from attendance, not manually entered)
         $adjustments = [
             ['type' => 'extra_days', 'amount' => $extraDays],
-            ['type' => 'ot', 'amount' => $ot],
             ['type' => 'incentive', 'amount' => $incentive],
             ['type' => 'advance', 'amount' => $advance]
         ];

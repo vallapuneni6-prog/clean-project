@@ -118,6 +118,7 @@ function recordAttendance($pdo, $data, $userOutletId) {
             $staffId = $record['staffId'];
             $date = $record['date'];
             $status = $record['status'];
+            $otHours = isset($record['otHours']) ? (float)$record['otHours'] : 0;
 
             // Validate status
             $validStatuses = ['Present', 'Week Off', 'Leave'];
@@ -171,18 +172,18 @@ function recordAttendance($pdo, $data, $userOutletId) {
                 // Update existing record
                 $stmt = $pdo->prepare('
                     UPDATE staff_attendance 
-                    SET status = ?, updated_at = NOW() 
+                    SET status = ?, ot_hours = ?, updated_at = NOW() 
                     WHERE staff_id = ? AND attendance_date = ?
                 ');
-                $stmt->execute([$status, $staffId, $date]);
+                $stmt->execute([$status, $otHours, $staffId, $date]);
             } else {
                 // Insert new record
                 $stmt = $pdo->prepare('
                     INSERT INTO staff_attendance (
-                        id, staff_id, attendance_date, status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                        id, staff_id, attendance_date, status, ot_hours, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
                 ');
-                $stmt->execute([$recordId, $staffId, $date, $status]);
+                $stmt->execute([$recordId, $staffId, $date, $status, $otHours]);
             }
         }
 
@@ -206,6 +207,7 @@ function getAttendanceRecords($pdo, $date = null, $staffId = null, $userOutletId
         sa.staff_id, 
         sa.attendance_date, 
         sa.status, 
+        COALESCE(sa.ot_hours, 0) as ot_hours,
         s.name as staff_name,
         s.phone
     FROM staff_attendance sa
@@ -264,6 +266,7 @@ function getAttendanceHistory($pdo, $staffId = null, $startDate = null, $endDate
     $query = 'SELECT 
         attendance_date, 
         status, 
+        COALESCE(ot_hours, 0) as ot_hours,
         created_at, 
         updated_at
     FROM staff_attendance 
