@@ -11,6 +11,7 @@ import { Outlets } from './components/Outlets'
 import { Invoices } from './components/Invoices'
 import { Notifications } from './components/Notifications'
 import { StaffSales } from './components/StaffSales'
+import { Payroll } from './components/Payroll'
 import { Voucher, Outlet, CustomerPackage, VoucherStatus, User } from './types'
 import { getVouchers, getOutlets, getPackages } from './api'
 import './App.css'
@@ -170,6 +171,8 @@ function App() {
         return <Notifications />
       case 'staff-sales':
         return <StaffSales currentUser={currentUser} />
+      case 'payroll':
+        return <Payroll currentUser={currentUser} outlets={outlets} />
       case 'users':
         return <Users currentUser={currentUser} />
       case 'outlets':

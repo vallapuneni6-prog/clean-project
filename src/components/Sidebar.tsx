@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isA
     { id: 'invoices', label: 'Invoices', icon: '📄', adminOnly: true },
     { id: 'users', label: 'Users', icon: '👥', adminOnly: true },
     { id: 'outlets', label: 'Outlets', icon: '🏪', adminOnly: true },
+    { id: 'payroll', label: 'Payroll', icon: '💰', adminOnly: true },
   ];
 
   const userMenuItems = [
