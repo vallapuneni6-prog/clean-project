@@ -1,0 +1,45 @@
+<?php
+// Database configuration
+// COPY THIS FILE TO database.php AND UPDATE WITH YOUR ACTUAL CREDENTIALS
+define('DB_HOST', 'localhost');  // Your database host
+define('DB_NAME', 'your_database_name');  // Your database name
+define('DB_USER', 'your_database_user');  // Your database username
+define('DB_PASS', 'your_database_password');  // Your database password
+
+// Create database connection
+function getDBConnection() {
+    try {
+        $conn = new PDO(
+            "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+            DB_USER,
+            DB_PASS,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_TIMEOUT => 5, // Add timeout
+            ]
+        );
+        return $conn;
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
+        exit();
+    }
+}
+
+// CORS headers with security improvements
+header('Access-Control-Allow-Origin: http://localhost:3000'); // Adjust for your domain
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Credentials: true'); // If using cookies/sessions
+header('Content-Type: application/json');
+header('X-Content-Type-Options: nosniff'); // Security header
+header('X-Frame-Options: DENY'); // Security header
+header('X-XSS-Protection: 1; mode=block'); // Security header
+
+// Handle preflight requests
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}

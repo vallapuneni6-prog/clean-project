@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Test</title>
+</head>
+<body>
+    <h1>Login Test</h1>
+    <button onclick="testLogin()">Test Login</button>
+    <div id="result"></div>
+
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            try {
+                const response = await fetch('http://localhost:8000/login.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'admin123'
+                    })
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = '<p>Status: ' + response.status + '</p>' +
+                    '<p>Response: ' + JSON.stringify(data) + '</p>';
+            } catch (error) {
+                resultDiv.innerHTML = '<p style="color:red;">Error: ' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>
