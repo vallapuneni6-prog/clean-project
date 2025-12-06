@@ -1,0 +1,173 @@
+# Cron Jobs for BigRock Hosting
+# Setup in cPanel > Cron Jobs > Standard
+
+## Daily Tasks
+
+### 1. Daily Backup (Recommended: Every day at 2 AM)
+Path: 0 2 * * *
+Command: curl -s https://yourdomain.com/api/cron/daily-backup > /dev/null 2>&1
+
+### 2. Generate Daily Report (Every day at 12:05 AM)
+Path: 5 0 * * *
+Command: curl -s https://yourdomain.com/api/cron/daily-report > /dev/null 2>&1
+
+### 3. Clear Expired Sessions (Every day at 3 AM)
+Path: 0 3 * * *
+Command: curl -s https://yourdomain.com/api/cron/cleanup-sessions > /dev/null 2>&1
+
+## Weekly Tasks
+
+### 1. Weekly Database Optimization (Every Sunday at 4 AM)
+Path: 0 4 * * 0
+Command: curl -s https://yourdomain.com/api/cron/optimize-db > /dev/null 2>&1
+
+### 2. Weekly Report Generation (Every Monday at 8 AM)
+Path: 0 8 * * 1
+Command: curl -s https://yourdomain.com/api/cron/weekly-report > /dev/null 2>&1
+
+### 3. Archive Old Data (Every Sunday at 5 AM)
+Path: 0 5 * * 0
+Command: curl -s https://yourdomain.com/api/cron/archive-data > /dev/null 2>&1
+
+## Monthly Tasks
+
+### 1. Monthly P&L Finalization (First day of month at 2 AM)
+Path: 0 2 1 * *
+Command: curl -s https://yourdomain.com/api/cron/finalize-month > /dev/null 2>&1
+
+### 2. Payroll Report Generation (25th of month at 10 AM)
+Path: 0 10 25 * *
+Command: curl -s https://yourdomain.com/api/cron/payroll-report > /dev/null 2>&1
+
+### 3. Database Full Backup (First of month at 3 AM)
+Path: 0 3 1 * *
+Command: curl -s https://yourdomain.com/api/cron/full-backup > /dev/null 2>&1
+
+## Cron Job Setup Steps
+
+1. Go to cPanel
+2. Find "Cron Jobs" in advanced section
+3. Select "Add New Cron Job"
+4. Set timing (Common Settings or Standard crontab)
+5. Paste command
+6. Click "Add New Cron Job"
+
+## Common Timing Patterns
+
+```
+Minute  Hour  Day   Month  Day-of-Week  Command
+  0      0     *      *        *        # Daily at midnight
+  0      2     *      *        *        # Daily at 2 AM
+  0      */6   *      *        *        # Every 6 hours
+  0      *     *      *        *        # Every hour
+  */5    *     *      *        *        # Every 5 minutes
+  0      2     1      *        *        # First day of month, 2 AM
+  0      2     *      *        0        # Every Sunday at 2 AM
+```
+
+## Important Notes
+
+1. **URLs must be HTTPS** - BigRock requires secure connections
+2. **Timeout** - Cron jobs timeout after ~300 seconds
+3. **Output** - Use `> /dev/null 2>&1` to suppress output
+4. **Authentication** - If cron needs auth, use API token in URL
+5. **Testing** - Test each cron URL manually first before scheduling
+6. **Monitoring** - Check email for cron job errors (if enabled)
+
+## Example Cron API Endpoint
+
+Create this in your API to handle cron jobs:
+
+```php
+<?php
+// api/cron/daily-report.php
+
+// Verify cron token (optional security)
+// $token = $_GET['token'] ?? '';
+// if ($token !== getenv('CRON_TOKEN')) {
+//     http_response_code(401);
+//     die('Unauthorized');
+// }
+
+// Your code here
+// Example:
+// - Generate daily report
+// - Send emails
+// - Cleanup data
+
+header('Content-Type: application/json');
+echo json_encode(['status' => 'success', 'message' => 'Daily report generated']);
+?>
+```
+
+## Testing Cron Jobs
+
+1. Open browser
+2. Visit: https://yourdomain.com/api/cron/daily-report
+3. Should return JSON response
+4. Then schedule in cPanel
+
+## Monitoring Cron Jobs
+
+In cPanel:
+1. Go to Cron Jobs
+2. Click "Edit" for each job
+3. Check "Log Output" to see results
+
+## Common Issues
+
+**Problem:** Cron job not running
+- Solution: Verify command uses full HTTPS URL
+- Solution: Check if URL is accessible from browser first
+
+**Problem:** Timeout errors
+- Solution: Set max_execution_time = 300 in php.ini
+- Solution: Break large operations into smaller chunks
+
+**Problem:** Email sent but shows error
+- Solution: Check cron command in cPanel
+- Solution: Test URL manually in browser
+
+---
+
+## Sample Cron Commands for This Project
+
+### Payroll Calculation (Monthly)
+```
+0 0 1 * * curl -s -H "Authorization: Bearer ADMIN_TOKEN" https://yourdomain.com/api/cron/calculate-payroll?month=$(date +%Y-%m) > /dev/null 2>&1
+```
+
+### P&L Report Generation (Monthly)
+```
+0 1 1 * * curl -s https://yourdomain.com/api/cron/generate-pnl?month=$(date +%Y-%m) > /dev/null 2>&1
+```
+
+### Daily Database Backup (Daily)
+```
+0 2 * * * mysqldump -u your_db_user -p'your_db_pass' your_db_name | gzip > /home/username/backups/db_$(date +\%Y\%m\%d).sql.gz
+```
+
+### Clean Up Old Logs (Weekly)
+```
+0 3 * * 0 find /home/username/logs -name "*.log" -mtime +30 -delete
+```
+
+---
+
+## Security Notes
+
+- Never put passwords in cron commands (use .env)
+- Use HTTPS for all cron URLs
+- Add token/key verification in cron endpoints
+- Log all cron executions
+- Monitor cron failures via email
+
+---
+
+**Setup Status:**
+- [ ] Daily Backup configured
+- [ ] Daily Report configured
+- [ ] Weekly Optimization configured
+- [ ] Monthly P&L configured
+- [ ] All cron URLs tested manually
+- [ ] Cron monitoring enabled
