@@ -11,11 +11,19 @@ Welcome to the Clean Project! This is a comprehensive salon/spa management syste
 👉 **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Full project documentation including:
 - Architecture overview
 - All features and modules
-- Database schema
 - API endpoints
 - Security features
 - Configuration
 - Troubleshooting
+
+### For Database Details
+👉 **[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)** - Complete database reference including:
+- All 18 tables with detailed schemas
+- Table relationships and diagrams
+- Primary keys and indexes
+- Foreign key constraints
+- Common queries
+- Data volume recommendations
 
 ### For Original Project Info
 👉 **[README.md](README.md)** - Original project README
