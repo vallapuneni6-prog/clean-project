@@ -209,15 +209,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     gstAmount: gstAmount,
                     totalAmount: totalWithGst,
                     staffTargetPercentage: 60,
-                    initialServices: assignServiceItems.map(s => ({
-                        staffId: s.staffId,
-                        staffName: s.staffName,
-                        serviceId: s.serviceId,
-                        serviceName: s.serviceName,
-                        quantity: s.quantity,
-                        price: s.price,
-                        total: s.total
-                    }))
+                    initialServices: assignServiceItems.map(s => {
+                        // Include GST in service total
+                        const serviceSubtotal = s.total;
+                        const serviceGst = (serviceSubtotal * assignForm.gstPercentage) / 100;
+                        return {
+                            staffId: s.staffId,
+                            staffName: s.staffName,
+                            serviceId: s.serviceId,
+                            serviceName: s.serviceName,
+                            quantity: s.quantity,
+                            price: s.price,
+                            total: serviceSubtotal + serviceGst
+                        };
+                    })
                 })
             });
 
@@ -322,15 +327,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     gstAmount: gstAmount,
                     totalAmount: totalWithGst,
                     staffTargetPercentage: 60,
-                    services: redeemServiceItems.map(s => ({
-                        staffId: s.staffId,
-                        staffName: s.staffName,
-                        serviceId: s.serviceId,
-                        serviceName: s.serviceName,
-                        quantity: s.quantity,
-                        price: s.price,
-                        total: s.total
-                    }))
+                    services: redeemServiceItems.map(s => {
+                        // Include GST in service total
+                        const serviceSubtotal = s.total;
+                        const serviceGst = (serviceSubtotal * redeemForm.gstPercentage) / 100;
+                        return {
+                            staffId: s.staffId,
+                            staffName: s.staffName,
+                            serviceId: s.serviceId,
+                            serviceName: s.serviceName,
+                            quantity: s.quantity,
+                            price: s.price,
+                            total: serviceSubtotal + serviceGst
+                        };
+                    })
                 })
             });
 
@@ -418,7 +428,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             }
         }
 
-        // Calculate total
+        // Calculate total (will include GST when sent to API)
         if (field === 'quantity' || field === 'price') {
             newItems[index].total = newItems[index].quantity * newItems[index].price;
         }

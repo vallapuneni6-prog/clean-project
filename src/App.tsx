@@ -12,6 +12,8 @@ import { Invoices } from './components/Invoices'
 import { Notifications } from './components/Notifications'
 import { StaffSales } from './components/StaffSales'
 import { Payroll } from './components/Payroll'
+import { Expenses } from './components/Expenses'
+import { ProfitAndLoss } from './components/ProfitAndLoss'
 import { Voucher, Outlet, CustomerPackage, VoucherStatus, User } from './types'
 import { getVouchers, getOutlets, getPackages } from './api'
 import './App.css'
@@ -173,6 +175,10 @@ function App() {
         return <StaffSales currentUser={currentUser} />
       case 'payroll':
         return <Payroll currentUser={currentUser} outlets={outlets} />
+      case 'expenses':
+        return <Expenses currentUser={currentUser} outlets={outlets} />
+      case 'profit-loss':
+        return <ProfitAndLoss currentUser={currentUser} outlets={outlets} />
       case 'users':
         return <Users currentUser={currentUser} />
       case 'outlets':
@@ -206,7 +212,7 @@ function App() {
           </div>
         </nav>
         
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 overflow-auto">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 overflow-auto bg-brand-background">
           {renderView()}
         </main>
       </div>

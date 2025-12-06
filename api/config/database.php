@@ -96,7 +96,28 @@ function getDBConnection() {
 
 // CORS headers with security improvements (only in web context)
 if (php_sapi_name() !== 'cli') {
-    header('Access-Control-Allow-Origin: *');
+    // Allowed origins for CORS
+    $allowedOrigins = [
+        'http://localhost:5173',      // Local development
+        'http://localhost:3000',      // Local development (alt)
+        'http://127.0.0.1:5173',      // Local development alt
+        'http://127.0.0.1:3000',      // Local development alt
+        // Add production domains here:
+        // 'https://yourdomain.com',
+        // 'https://www.yourdomain.com',
+    ];
+    
+    // Get origin from request
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    
+    // Check if origin is allowed
+    if (in_array($origin, $allowedOrigins)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    } else if (php_sapi_name() !== 'cli' && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        // For OPTIONS requests from disallowed origins, still respond
+        // but don't set CORS headers (this prevents actual requests)
+    }
+    
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization');
     header('Access-Control-Allow-Credentials: true');

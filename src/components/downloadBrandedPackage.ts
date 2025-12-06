@@ -27,8 +27,8 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
 
         const invoiceHTML = `
             <div style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; padding: 10px; width: 100%; box-sizing: border-box;">
-                <div style="display: flex; justify-content: center; margin-bottom: 10px;">
-                    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Logo" style="max-width: 80px; height: auto; filter: grayscale(100%); display: block;">` : ''}
+                <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+                    ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Logo" style="max-width: 140px; height: auto; filter: grayscale(100%); display: block;">` : ''}
                 </div>
                 <div style="text-align: center; font-weight: bold; font-size: 13px; margin: 5px 0;">${outlet?.name || 'Business Name'}</div>
                 ${outlet?.address ? `<div style="text-align: center; font-size: 11px; margin: 2px 0;">${outlet.address}</div>` : ''}
@@ -37,7 +37,7 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
                 
                 <div style="text-align: center; font-weight: bold; font-size: 12px; margin: 8px 0;">PACKAGE INVOICE</div>
                 
-                <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 
                 <table style="width: 100%;">
                     <tr>
@@ -50,45 +50,45 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
                     </tr>
                 </table>
                 
-                <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 
-                <div style="margin: 5px 0;">
+                <div style="margin: 8px 0;">
                     <div style="font-weight: bold;">Customer</div>
                     <div>${customerPackage.customerName}</div>
                     <div>${customerPackage.customerMobile}</div>
                 </div>
                 
-                <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 
-                <table style="width: 100%; margin: 5px 0;">
-                    <tr style="border-bottom: 1px solid #000;">
-                        <td style="padding: 2px; text-align: left; font-weight: bold;">Package</td>
-                        <td style="padding: 2px; text-align: right; font-weight: bold;">Value</td>
+                <table style="width: 100%; margin: 8px 0; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 4px 2px 8px 2px; text-align: left; font-weight: bold; border-bottom: 1px solid #000;">Package</td>
+                        <td style="padding: 4px 2px 8px 2px; text-align: right; font-weight: bold; border-bottom: 1px solid #000;">Value</td>
                     </tr>
                     <tr>
-                        <td style="padding: 2px; text-align: left; font-size: 11px;">${template.name}</td>
-                        <td style="padding: 2px; text-align: right; font-size: 11px;">₹${template.packageValue.toFixed(2)}</td>
+                        <td style="padding: 4px 2px; text-align: left; font-size: 11px;">${template.name}</td>
+                        <td style="padding: 4px 2px; text-align: right; font-size: 11px;">₹${template.packageValue.toFixed(2)}</td>
                     </tr>
                 </table>
                 
-                <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 
                 <table style="width: 100%;">
                     <tr>
-                        <td style="text-align: left; padding: 2px 0;">Package Value:</td>
-                        <td style="text-align: right;">₹${template.serviceValue.toFixed(2)}</td>
+                        <td style="text-align: left; padding: 4px 0;">Package Value:</td>
+                        <td style="text-align: right; padding: 4px 0;">₹${template.serviceValue.toFixed(2)}</td>
                     </tr>
                     <tr>
-                        <td style="text-align: left; padding: 2px 0;">Used:</td>
-                        <td style="text-align: right;">- ₹${(template.serviceValue - customerPackage.remainingServiceValue).toFixed(2)}</td>
+                        <td style="text-align: left; padding: 4px 0;">Used:</td>
+                        <td style="text-align: right; padding: 4px 0;">- ₹${(template.serviceValue - customerPackage.remainingServiceValue).toFixed(2)}</td>
                     </tr>
                     <tr style="border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 14px;">
-                        <td style="text-align: left; padding: 2px 0;">BALANCE:</td>
-                        <td style="text-align: right;">₹${customerPackage.remainingServiceValue.toFixed(2)}</td>
+                        <td style="text-align: left; padding: 6px 0;">BALANCE:</td>
+                        <td style="text-align: right; padding: 6px 0;">₹${customerPackage.remainingServiceValue.toFixed(2)}</td>
                     </tr>
                 </table>
                 
-                <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 
                 <div style="text-align: center; font-size: 10px; color: #666; margin-top: 10px;">
                     Thank you for your business!

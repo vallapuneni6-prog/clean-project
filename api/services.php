@@ -4,6 +4,7 @@ ini_set('display_errors', 1);
 
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/helpers/functions.php';
+require_once __DIR__ . '/helpers/auth.php';
 
 // Check for template action before setting JSON headers
 $method = $_SERVER['REQUEST_METHOD'];
@@ -21,6 +22,12 @@ if ($method === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
+
+// Start session and verify authorization
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$user = verifyAuthorization(true);
 
 try {
     $pdo = getDBConnection();

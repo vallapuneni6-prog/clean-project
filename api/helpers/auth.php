@@ -158,8 +158,10 @@ function validateJWTToken($token) {
 /**
  * Get JWT secret key
  * Loads from environment or config file
+ * REQUIRED - must be set, no fallback allowed
  * 
  * @return string JWT secret key
+ * @throws Exception if JWT_SECRET not configured
  */
 function getJWTSecret() {
     // Try environment variable first
@@ -177,10 +179,12 @@ function getJWTSecret() {
         }
     }
     
-    // Fallback to hardcoded secret (SECURITY: Should be in env in production)
-    $fallbackSecret = 'your-super-secret-key-change-this-in-production-12345';
-    logAuthMessage("WARNING: Using fallback JWT secret - configure JWT_SECRET environment variable");
-    return $fallbackSecret;
+    // No secret found - this is a fatal configuration error
+    $errorMsg = "FATAL: JWT_SECRET environment variable is not configured. Please set JWT_SECRET in your .env file or as an environment variable.";
+    logAuthMessage($errorMsg);
+    http_response_code(500);
+    echo json_encode(['error' => 'Server configuration error']);
+    exit(1);
 }
 
 /**

@@ -5,6 +5,7 @@ ini_set('display_errors', 0);
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
 
 // Function to generate random 5-character alphanumeric code (uppercase)
 function generateVoucherCode() {
@@ -16,14 +17,19 @@ function generateVoucherCode() {
     return $code;
 }
 
+// Start session and verify authorization
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$user = verifyAuthorization(true);
+$currentUserId = $user['user_id'];
+
 try {
     $pdo = getDBConnection();
     
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-         // Get current user from session
-         session_start();
-         $currentUserId = $_SESSION['user_id'] ?? null;
-         $userRole = $_SESSION['user_role'] ?? null;
+         // Get user info from verified authentication
+         $userRole = $_SESSION['user_role'] ?? $user['role'] ?? null;
          $isSuperAdmin = (bool)($_SESSION['is_super_admin'] ?? false);
          
          // Get all vouchers with outlet phone numbers

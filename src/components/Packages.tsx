@@ -234,8 +234,19 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser, outlets: passed
         </div>
 
         {/* Count Display */}
-        <div className="text-sm text-gray-600 font-medium">
-          {getFilteredAndSortedPackages().length} {getFilteredAndSortedPackages().length === 1 ? 'package' : 'packages'}
+        <div className="flex gap-4 items-center text-sm">
+          <span className="text-gray-600 font-medium">
+            {getFilteredAndSortedPackages().length} {getFilteredAndSortedPackages().length === 1 ? 'package' : 'packages'}
+          </span>
+          {(isAdmin || isSuperAdmin) && getFilteredAndSortedPackages().length > 0 && (
+            <div className="bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
+              <span className="text-blue-700 font-semibold">
+                Total: ₹{getFilteredAndSortedPackages().reduce((sum, pkg) => {
+                  return sum + (pkg.initialPackageValue || 0);
+                }, 0).toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Export Button */}

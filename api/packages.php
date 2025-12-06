@@ -5,6 +5,13 @@ ini_set('display_errors', 1);
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
+
+// Start session and verify authorization
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$user = verifyAuthorization(true);
 
 try {
     $pdo = getDBConnection();
@@ -29,8 +36,13 @@ try {
             sendJSON($templates);
             
         } elseif ($type === 'customer_packages') {
-            // Get all customer packages
-            $stmt = $pdo->query("SELECT * FROM customer_packages ORDER BY created_at DESC");
+            // Get all customer packages with template data
+            $stmt = $pdo->query("
+                SELECT cp.*, pt.package_value 
+                FROM customer_packages cp
+                LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
+                ORDER BY cp.created_at DESC
+            ");
             $packages = $stmt->fetchAll();
             
             $packages = array_map(function($p) {
@@ -41,7 +53,8 @@ try {
                     'packageTemplateId' => $p['package_template_id'],
                     'outletId' => $p['outlet_id'],
                     'assignedDate' => $p['assigned_date'],
-                    'remainingServiceValue' => (float)$p['remaining_service_value']
+                    'remainingServiceValue' => (float)$p['remaining_service_value'],
+                    'initialPackageValue' => (float)($p['package_value'] ?? 0)
                 ];
             }, $packages);
             

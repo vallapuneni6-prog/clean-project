@@ -52,6 +52,7 @@ export interface CustomerPackage {
   outletId: string;
   assignedDate: Date;
   remainingServiceValue: number;
+  initialPackageValue?: number;
 }
 
 export interface ServiceRecord {

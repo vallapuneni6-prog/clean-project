@@ -20,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isA
     { id: 'invoices', label: 'Invoices', icon: '📄', adminOnly: true },
     { id: 'users', label: 'Admin', icon: '⚙️', adminOnly: true },
     { id: 'outlets', label: 'Outlets', icon: '🏪', adminOnly: true },
+    { id: 'profit-loss', label: 'Profit & Loss', icon: '📊', adminOnly: true },
   ];
 
   const adminMenuItems = [
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isA
     { id: 'users', label: 'Users', icon: '👥', adminOnly: true },
     { id: 'outlets', label: 'Outlets', icon: '🏪', adminOnly: true },
     { id: 'payroll', label: 'Payroll', icon: '💰', adminOnly: true },
+    { id: 'profit-loss', label: 'Profit & Loss', icon: '📊', adminOnly: true },
   ];
 
   const userMenuItems = [
@@ -38,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isA
     { id: 'notifications', label: 'Notifications', icon: '✅', adminOnly: false },
     { id: 'invoices', label: 'Invoices', icon: '📄', adminOnly: false },
     { id: 'staff-sales', label: 'Staff Sales', icon: '📊', adminOnly: false },
+    { id: 'expenses', label: 'Expenses', icon: '💸', adminOnly: false },
   ];
 
   const menuItems = isSuperAdmin ? superAdminMenuItems : (isAdmin ? adminMenuItems : userMenuItems);
@@ -95,11 +98,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isA
           </div>
           </aside>
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay - only shows on mobile when menu is open */}
       {isOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          className="md:hidden fixed inset-0 bg-black/40 z-30 cursor-pointer"
           onClick={() => setIsOpen(false)}
+          style={{ top: 0, left: 0, right: 0, bottom: 0 }}
         />
       )}
     </>

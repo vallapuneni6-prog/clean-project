@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS customer_packages (
     outlet_id VARCHAR(50) NOT NULL,
     assigned_date DATE NOT NULL,
     remaining_service_value DECIMAL(10, 2) NOT NULL,
+    gst_percentage DECIMAL(5, 2) DEFAULT 5.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (package_template_id) REFERENCES package_templates(id),

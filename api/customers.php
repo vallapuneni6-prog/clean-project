@@ -4,6 +4,7 @@ ini_set('display_errors', 0);
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
 
 // Check for template action before setting JSON headers
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
@@ -12,6 +13,12 @@ $isTemplateRequest = $action === 'template';
 if (!$isTemplateRequest) {
     header('Content-Type: application/json');
 }
+
+// Start session and verify authorization
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$user = verifyAuthorization(true);
 
 try {
     $pdo = getDBConnection();

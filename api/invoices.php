@@ -6,11 +6,20 @@ ini_set('log_errors', 1);
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
+
+// Start session before checking authorization
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 try {
     $pdo = getDBConnection();
     
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        // Verify authorization
+        $user = verifyAuthorization(true);
+        
         // Get all invoices or filter by outlet
         $outletId = $_GET['outletId'] ?? null;
         

@@ -1146,7 +1146,7 @@ export const Invoices: React.FC<InvoicesProps> = ({ currentUser, outlets, isAdmi
                                             className="bg-brand-background text-brand-text-primary px-3 py-2 rounded-lg border border-brand-border focus:outline-none focus:ring-2 focus:ring-brand-primary"
                                         >
                                             <option value="all">{isSuperAdmin ? 'All Outlets' : 'All Assigned Outlets'}</option>
-                                            {(isSuperAdmin ? outlets : outlets.filter(outlet => adminOutletIds.includes(outlet.id)))
+                                            {(isSuperAdmin ? outlets : (adminOutletIds.length > 0 ? outlets.filter(outlet => adminOutletIds.includes(outlet.id)) : outlets))
                                                 .map(outlet => (
                                                     <option key={outlet.id} value={outlet.id}>
                                                         {outlet.name} ({outlet.code})
@@ -1193,8 +1193,17 @@ export const Invoices: React.FC<InvoicesProps> = ({ currentUser, outlets, isAdmi
                                     </div>
                                 )}
 
-                                <div className="text-sm text-brand-text-secondary">
-                                    {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''}
+                                <div className="flex gap-4 items-center text-sm">
+                                    <span className="text-brand-text-secondary">
+                                        {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''}
+                                    </span>
+                                    {isAdmin && filteredInvoices.length > 0 && (
+                                        <div className="bg-green-50 dark:bg-green-900 px-3 py-1 rounded-lg border border-green-200 dark:border-green-700">
+                                            <span className="text-green-700 dark:text-green-300 font-semibold">
+                                                Total: ₹{filteredInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {filteredInvoices.length > 0 && (
