@@ -166,7 +166,7 @@ function App() {
       case 'vouchers':
         return isAdmin ? <VouchersTable vouchers={vouchers} outlets={outlets} currentUser={currentUser} /> : <Vouchers />
       case 'packages':
-        return isAdmin ? <Packages currentUser={currentUser} outlets={outlets} /> : <UserDashboard currentUser={currentUser} outlets={outlets} />
+        return isAdmin ? <Packages currentUser={currentUser} /> : <UserDashboard currentUser={currentUser} outlets={outlets} />
       case 'invoices':
         return <Invoices currentUser={currentUser} outlets={outlets} isAdmin={isAdmin} />
       case 'notifications':

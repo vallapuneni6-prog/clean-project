@@ -105,7 +105,25 @@ CREATE TABLE IF NOT EXISTS package_templates (
     INDEX idx_outlet_id (outlet_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 8. Create Customer Packages Table
+-- 8. Create Sittings Packages Table
+CREATE TABLE IF NOT EXISTS sittings_packages (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    paid_sittings INT NOT NULL,
+    free_sittings INT NOT NULL,
+    service_ids JSON,
+    service_id VARCHAR(50),
+    service_name VARCHAR(100),
+    outlet_id VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (outlet_id) REFERENCES outlets(id),
+    FOREIGN KEY (service_id) REFERENCES services(id),
+    INDEX idx_outlet_id (outlet_id),
+    INDEX idx_service_id (service_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9. Create Customer Packages Table
 CREATE TABLE IF NOT EXISTS customer_packages (
     id VARCHAR(50) PRIMARY KEY,
     customer_name VARCHAR(100) NOT NULL,
@@ -124,7 +142,35 @@ CREATE TABLE IF NOT EXISTS customer_packages (
     INDEX idx_customer_mobile (customer_mobile)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 9. Create Package Service Records Table
+-- 10. Create Customer Sittings Packages Table
+CREATE TABLE IF NOT EXISTS customer_sittings_packages (
+    id VARCHAR(50) PRIMARY KEY,
+    customer_name VARCHAR(100) NOT NULL,
+    customer_mobile VARCHAR(15) NOT NULL,
+    sittings_package_id VARCHAR(50) NOT NULL,
+    service_id VARCHAR(50),
+    service_name VARCHAR(100),
+    service_value DECIMAL(10, 2),
+    outlet_id VARCHAR(50) NOT NULL,
+    assigned_date DATE NOT NULL,
+    total_sittings INT NOT NULL,
+    used_sittings INT DEFAULT 0,
+    initial_staff_id VARCHAR(50),
+    initial_staff_name VARCHAR(100),
+    initial_sitting_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (sittings_package_id) REFERENCES sittings_packages(id),
+    FOREIGN KEY (service_id) REFERENCES services(id),
+    FOREIGN KEY (initial_staff_id) REFERENCES staff(id),
+    FOREIGN KEY (outlet_id) REFERENCES outlets(id),
+    INDEX idx_outlet_id (outlet_id),
+    INDEX idx_assigned_date (assigned_date),
+    INDEX idx_customer_mobile (customer_mobile),
+    INDEX idx_service_id (service_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. Create Package Service Records Table
 CREATE TABLE IF NOT EXISTS package_service_records (
     id VARCHAR(50) PRIMARY KEY,
     customer_package_id VARCHAR(50) NOT NULL,
@@ -140,7 +186,7 @@ CREATE TABLE IF NOT EXISTS package_service_records (
     INDEX idx_transaction_id (transaction_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 10. Create Vouchers Table
+-- 12. Create Vouchers Table
 CREATE TABLE IF NOT EXISTS vouchers (
     id VARCHAR(50) PRIMARY KEY,
     recipient_name VARCHAR(100) NOT NULL,
@@ -162,7 +208,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
     INDEX idx_issue_date (issue_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 11. Create Invoices Table
+-- 13. Create Invoices Table
 CREATE TABLE IF NOT EXISTS invoices (
     id VARCHAR(50) PRIMARY KEY,
     invoice_number VARCHAR(50) UNIQUE NOT NULL,

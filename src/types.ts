@@ -42,6 +42,36 @@ export interface PackageTemplate {
   name: string;
   packageValue: number;
   serviceValue: number;
+  outletId?: string;
+}
+
+export interface SittingsPackage {
+  id: string;
+  name: string;
+  paidSittings: number;
+  freeSittings: number;
+  serviceIds?: string[]; // services this package applies to (deprecated, use serviceId)
+  serviceId?: string; // primary service for this package
+  serviceName?: string;
+  outletId?: string;
+}
+
+export interface CustomerSittingsPackage {
+  id: string;
+  customerName: string;
+  customerMobile: string;
+  sittingsPackageId: string;
+  serviceId?: string;
+  serviceName?: string;
+  serviceValue?: number;
+  outletId: string;
+  assignedDate: Date;
+  totalSittings: number; // paidSittings + freeSittings
+  remainingSittings: number;
+  usedSittings: number;
+  initialStaffId?: string;
+  initialStaffName?: string;
+  initialSittingDate?: Date;
 }
 
 export interface CustomerPackage {

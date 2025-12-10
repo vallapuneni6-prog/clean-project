@@ -507,7 +507,7 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
                                             ₹{expense.expenseAmount.toFixed(2)}
                                         </td>
                                         <td className="px-4 py-4 text-sm text-right font-medium text-orange-600">
-                                            ₹{(expense.cashDeposited || 0).toFixed(2)}
+                                            ₹{((expense as any).cashDeposited || 0).toFixed(2)}
                                         </td>
                                         <td className="px-4 py-4 text-sm text-right font-bold text-green-600">
                                             ₹{expense.closingBalance.toFixed(2)}

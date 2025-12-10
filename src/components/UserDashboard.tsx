@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CustomerPackage, User, Outlet, PackageTemplate } from '../types';
-import { generateBrandedPackageInvoiceImage } from './downloadBrandedPackage';
+import { CustomerPackage, User, Outlet, PackageTemplate, SittingsPackage, CustomerSittingsPackage } from '../types';
+import { generateBrandedPackageInvoiceImage, generateBrandedSittingsInvoiceImage } from './downloadBrandedPackage';
 
 interface UserDashboardProps {
     currentUser: User;
@@ -9,9 +9,12 @@ interface UserDashboardProps {
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outlets }) => {
     const userOutletId = currentUser.outletId || '';
+    const [activePackageType, setActivePackageType] = useState<'value' | 'sittings'>('value');
     const [activeTab, setActiveTab] = useState<'assign' | 'redeem'>('assign');
     const [packages, setPackages] = useState<any[]>([]);
     const [customerPackages, setCustomerPackages] = useState<CustomerPackage[]>([]);
+    const [sittingsTemplates, setSittingsTemplates] = useState<SittingsPackage[]>([]);
+    const [customerSittingsPackages, setCustomerSittingsPackages] = useState<CustomerSittingsPackage[]>([]);
     const [staff, setStaff] = useState<any[]>([]);
     const [services, setServices] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -25,6 +28,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         assignedDate: new Date().toISOString().split('T')[0],
         packageId: '',
         gstPercentage: 5,
+        serviceName: '',
+        serviceId: '',
+        serviceValue: 0,
         initialServices: [] as { staff: string; name: string; quantity: number; price: number; serviceId: string }[]
     });
 
@@ -37,9 +43,36 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         gstPercentage: 5
     });
 
+    // Form state for Assign Sittings Package
+    const [assignSittingsForm, setAssignSittingsForm] = useState({
+        customerName: '',
+        customerMobile: '',
+        assignedDate: new Date().toISOString().split('T')[0],
+        sittingsPackageId: '',
+        serviceId: '',
+        serviceName: '',
+        serviceValue: 0,
+        gstPercentage: 5,
+        redeemInitialSitting: false,
+        initialStaffId: '',
+        initialStaffName: '',
+        initialSittingDate: new Date().toISOString().split('T')[0],
+        initialServices: [] as { staff: string; name: string; quantity: number; price: number; serviceId: string }[]
+    });
+
+    // Form state for Redeem Sittings
+    const [redeemSittingsForm, setRedeemSittingsForm] = useState({
+        customerSittingsPackageId: '',
+        staffId: '',
+        staffName: '',
+        redemptionDate: new Date().toISOString().split('T')[0]
+    });
+
     // Search and filter state for Redeem Services
     const [redeemSearchQuery, setRedeemSearchQuery] = useState('');
     const [filteredCustomerPackages, setFilteredCustomerPackages] = useState<CustomerPackage[]>([]);
+    const [redeemSearchQuerySittings, setRedeemSearchQuerySittings] = useState('');
+    const [filteredCustomerSittingsPackages, setFilteredCustomerSittingsPackages] = useState<CustomerSittingsPackage[]>([]);
 
     // Service Items state for Assign Package
     const [assignServiceItems, setAssignServiceItems] = useState<Array<{ serviceId: string; serviceName: string; quantity: number; price: number; total: number; staffId: string; staffName: string }>>(
@@ -51,12 +84,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         [{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]
     );
 
+    // Service Items state for Assign Sittings Package
+    const [assignSittingsServiceItems, setAssignSittingsServiceItems] = useState<Array<{ serviceId: string; serviceName: string; quantity: number; price: number; total: number; staffId: string; staffName: string }>>(
+        [{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]
+    );
+
+    // Service Items state for Redeem Sittings
+    const [redeemSittingsServiceItems, setRedeemSittingsServiceItems] = useState<Array<{ serviceId: string; serviceName: string; quantity: number; price: number; total: number; staffId: string; staffName: string }>>(
+        [{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]
+    );
+
     // Track last assigned package for display
     const [lastAssignedPackage, setLastAssignedPackage] = useState<CustomerPackage | null>(null);
+    const [lastAssignedSittingsPackage, setLastAssignedSittingsPackage] = useState<CustomerSittingsPackage | null>(null);
 
     // Form visibility states
     const [showAssignForm, setShowAssignForm] = useState(false);
     const [showRedeemForm, setShowRedeemForm] = useState(false);
+    const [showAssignSittingsForm, setShowAssignSittingsForm] = useState(false);
+    const [showRedeemSittingsForm, setShowRedeemSittingsForm] = useState(false);
 
     // Invoice preview and history states
     const [invoicePreview, setInvoicePreview] = useState<string | null>(null);
@@ -65,11 +111,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     const [previewOutlet, setPreviewOutlet] = useState<Outlet | null>(null);
     const [showHistory, setShowHistory] = useState<string | null>(null);
     const [historyRecords, setHistoryRecords] = useState<any[]>([]);
-    
+
     // WhatsApp preview state
     const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
     const [whatsAppImageData, setWhatsAppImageData] = useState<string | null>(null);
-    const [whatsAppPackage, setWhatsAppPackage] = useState<CustomerPackage | null>(null);
+    const [whatsAppPackage, setWhatsAppPackage] = useState<CustomerPackage | CustomerSittingsPackage | null>(null);
 
     const messageStyles = {
         success: 'bg-green-100 border border-green-400 text-green-700',
@@ -82,8 +128,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         setMessage({ type, text });
     };
 
-    const handleMobileNumberChange = async (mobile: string) => {
-        setAssignForm({ ...assignForm, customerMobile: mobile });
+    const handleMobileNumberChange = async (mobile: string, isSittings: boolean = false) => {
+        if (!isSittings) {
+            setAssignForm({ ...assignForm, customerMobile: mobile });
+        } else {
+            setAssignSittingsForm({ ...assignSittingsForm, customerMobile: mobile });
+        }
 
         // If mobile is empty or too short, don't search
         if (!mobile.trim() || mobile.trim().length < 10) {
@@ -98,7 +148,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 const customers = await response.json();
                 if (customers && customers.length > 0) {
                     // If customer found, populate the customer name
-                    setAssignForm(prev => ({ ...prev, customerName: customers[0].name }));
+                    if (!isSittings) {
+                        setAssignForm(prev => ({ ...prev, customerName: customers[0].name }));
+                    } else {
+                        setAssignSittingsForm(prev => ({ ...prev, customerName: customers[0].name }));
+                    }
                 }
             }
         } catch (error) {
@@ -126,15 +180,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
     }, [redeemSearchQuery, customerPackages]);
 
+    useEffect(() => {
+        // Filter customer sittings packages based on search query
+        if (redeemSearchQuerySittings.trim() === '') {
+            setFilteredCustomerSittingsPackages(customerSittingsPackages);
+        } else {
+            const query = redeemSearchQuerySittings.toLowerCase();
+            const filtered = customerSittingsPackages.filter(pkg =>
+                pkg.customerName.toLowerCase().includes(query) ||
+                pkg.customerMobile.includes(query)
+            );
+            setFilteredCustomerSittingsPackages(filtered);
+        }
+    }, [redeemSearchQuerySittings, customerSittingsPackages]);
+
     const loadData = async () => {
         try {
             setLoading(true);
             const staffUrl = userOutletId ? `/api/staff?outletId=${userOutletId}` : '/api/staff';
-            const [packagesRes, customerPackagesRes, staffRes, servicesRes] = await Promise.all([
+            const [packagesRes, customerPackagesRes, staffRes, servicesRes, sittingsTemplatesRes, customerSittingsRes] = await Promise.all([
                 fetch('/api/packages?type=templates'),
                 fetch('/api/packages?type=customer_packages'),
                 fetch(staffUrl),
-                fetch('/api/services?action=list')
+                fetch('/api/services?action=list'),
+                fetch('/api/sittings-packages?type=templates'),
+                fetch('/api/sittings-packages?type=customer_packages')
             ]);
 
             if (packagesRes.ok) {
@@ -148,6 +218,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
                 );
                 setCustomerPackages(sortedData.map((p: any) => ({
+                    ...p,
+                    assignedDate: new Date(p.assignedDate)
+                })));
+            }
+
+            if (sittingsTemplatesRes.ok) {
+                setSittingsTemplates(await sittingsTemplatesRes.json());
+            }
+
+            if (customerSittingsRes.ok) {
+                const data = await customerSittingsRes.json();
+                const sortedData = data.sort((a: any, b: any) =>
+                    new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
+                );
+                setCustomerSittingsPackages(sortedData.map((p: any) => ({
                     ...p,
                     assignedDate: new Date(p.assignedDate)
                 })));
@@ -279,6 +364,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     assignedDate: new Date().toISOString().split('T')[0],
                     packageId: '',
                     gstPercentage: 5,
+                    serviceName: '',
+                    serviceId: '',
+                    serviceValue: 0,
                     initialServices: [] as { staff: string; name: string; quantity: number; price: number; serviceId: string }[]
                 });
                 setAssignServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
@@ -486,6 +574,347 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         setRedeemServiceItems(newItems);
     };
 
+    // Handle Assign Sittings Package
+    const handleAssignSittingsPackage = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!assignSittingsForm.customerName.trim()) {
+            showMessage('Please enter customer name', 'warning');
+            return;
+        }
+
+        if (!assignSittingsForm.customerMobile.match(/^[6-9][0-9]{9}$/)) {
+            showMessage('Please enter a valid 10-digit mobile number', 'warning');
+            return;
+        }
+
+        if (!assignSittingsForm.sittingsPackageId) {
+            showMessage('Please select a sittings package', 'warning');
+            return;
+        }
+
+        if (!assignSittingsForm.serviceId) {
+            showMessage('Service not found for the selected package', 'warning');
+            return;
+        }
+
+        try {
+            const serviceValue = assignSittingsForm.serviceValue;
+            const selectedPackage = sittingsTemplates.find(p => p.id === assignSittingsForm.sittingsPackageId);
+            if (!selectedPackage) {
+                showMessage('Package not found', 'error');
+                return;
+            }
+
+            // Check if initial sitting is being redeemed (service item added)
+            console.log('=== INITIAL SITTING DEBUG ===');
+            console.log('All service items:', assignSittingsServiceItems);
+            
+            const initialItem = assignSittingsServiceItems[0];
+            console.log('Initial item:', initialItem);
+            console.log('Staff check:', {
+                staffId: initialItem?.staffId,
+                staffName: initialItem?.staffName,
+                staffIdType: typeof initialItem?.staffId,
+                staffNameType: typeof initialItem?.staffName,
+                staffIdEmpty: !initialItem?.staffId,
+                staffNameEmpty: !initialItem?.staffName
+            });
+            
+            const hasInitialSitting = initialItem && 
+                                     initialItem.staffId && 
+                                     initialItem.staffName && 
+                                     initialItem.serviceName;
+
+            console.log('Has Initial Sitting?', hasInitialSitting);
+
+            const paidSittings = selectedPackage.paidSittings;
+            const subtotal = serviceValue * paidSittings;
+            const gstAmount = (subtotal * assignSittingsForm.gstPercentage) / 100;
+
+            console.log('Sending assign sittings request with:', {
+                hasInitialSitting: hasInitialSitting,
+                initialStaffId: initialItem?.staffId,
+                initialStaffName: initialItem?.staffName
+            });
+
+            const response = await fetch('/api/sittings-packages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'assign',
+                    customerName: assignSittingsForm.customerName,
+                    customerMobile: assignSittingsForm.customerMobile,
+                    sittingsPackageId: assignSittingsForm.sittingsPackageId,
+                    serviceId: assignSittingsForm.serviceId,
+                    serviceName: assignSittingsForm.serviceName,
+                    serviceValue: serviceValue,
+                    assignedDate: assignSittingsForm.assignedDate,
+                    redeemInitialSitting: hasInitialSitting,
+                    initialStaffId: assignSittingsServiceItems[0]?.staffId || null,
+                    initialStaffName: assignSittingsServiceItems[0]?.staffName || null,
+                    initialSittingDate: hasInitialSitting ? assignSittingsForm.initialSittingDate : null,
+                    outletId: userOutletId,
+                    gstPercentage: assignSittingsForm.gstPercentage,
+                    gstAmount: gstAmount,
+                    totalAmount: subtotal + gstAmount,
+                    staffTargetPercentage: 60
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                const newPackage = result.newPackage as CustomerSittingsPackage;
+
+                console.log('✓ Assignment response received:', {
+                    redeemInitialSitting: assignSittingsForm.redeemInitialSitting,
+                    apiReturnedUsedSittings: newPackage.usedSittings,
+                    apiReturnedRemainingsSittings: newPackage.remainingSittings,
+                    totalSittings: newPackage.totalSittings,
+                    initialStaffId: newPackage.initialStaffId,
+                    initialStaffName: newPackage.initialStaffName
+                });
+
+                setLastAssignedSittingsPackage(newPackage);
+
+                // Find the template and outlet for invoice generation
+                const template = sittingsTemplates.find(t => t.id === assignSittingsForm.sittingsPackageId);
+                const outlet = outlets.find(o => o.id === userOutletId);
+
+                if (template && outlet && newPackage) {
+                    try {
+                        // Ensure package data is complete
+                        console.log('Generating sittings invoice with:', {
+                            totalSittings: newPackage.totalSittings,
+                            usedSittings: newPackage.usedSittings,
+                            remainingSittings: newPackage.remainingSittings,
+                            redeemInitialSitting: assignSittingsForm.redeemInitialSitting,
+                            invoiceWillShowUsed: newPackage.usedSittings > 0
+                        });
+
+                        // Generate invoice image for sittings package
+                        const invoiceImage = await generateBrandedSittingsInvoiceImage(
+                            newPackage,
+                            template,
+                            outlet
+                        );
+
+                        // Show preview modal
+                        setWhatsAppImageData(invoiceImage);
+                        setWhatsAppPackage(newPackage);
+                        setShowWhatsAppPreview(true);
+                    } catch (error) {
+                        console.error('Error generating invoice:', error);
+                        showMessage('Sittings package assigned! (Could not generate invoice)', 'success');
+                    }
+                } else {
+                    showMessage('Sittings package assigned! (Could not generate invoice)', 'success');
+                }
+
+                setAssignSittingsForm({
+                    customerName: '',
+                    customerMobile: '',
+                    assignedDate: new Date().toISOString().split('T')[0],
+                    sittingsPackageId: '',
+                    serviceId: '',
+                    serviceName: '',
+                    serviceValue: 0,
+                    gstPercentage: 5,
+                    redeemInitialSitting: false,
+                    initialStaffId: '',
+                    initialStaffName: '',
+                    initialSittingDate: new Date().toISOString().split('T')[0],
+                    initialServices: []
+                });
+                setAssignSittingsServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
+                setAssignSittingsServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
+
+                setTimeout(() => {
+                    loadData();
+                }, 1000);
+            } else {
+                showMessage('Failed to assign sittings package', 'error');
+            }
+        } catch (error) {
+            console.error('Error assigning sittings package:', error);
+            showMessage('Error assigning sittings package', 'error');
+        }
+    };
+
+    // Handle Redeem Sittings
+    const handleRedeemSittings = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!redeemSittingsForm.customerSittingsPackageId) {
+            showMessage('Please select a sittings package', 'warning');
+            return;
+        }
+
+        if (!redeemSittingsForm.staffId || !redeemSittingsForm.staffName) {
+            showMessage('Please select staff member for this sitting', 'warning');
+            return;
+        }
+
+        try {
+            // Sitting packages: 1 sitting used per redemption, no pricing
+            const response = await fetch('/api/sittings-packages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'use_sitting',
+                    customerPackageId: redeemSittingsForm.customerSittingsPackageId,
+                    redemptionDate: redeemSittingsForm.redemptionDate,
+                    staffId: redeemSittingsForm.staffId,
+                    staffName: redeemSittingsForm.staffName,
+                    sittingsUsed: 1
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                
+                // Find customer package and template for invoice generation
+                let customerPkg = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
+                const template = sittingsTemplates.find(t => t.id === customerPkg?.sittingsPackageId);
+                const outlet = outlets.find(o => o.id === userOutletId || o.id === customerPkg?.outletId);
+
+                if (customerPkg && template && outlet) {
+                    try {
+                        // Update the package with the latest sitting counts from API response
+                        customerPkg = {
+                            ...customerPkg,
+                            usedSittings: result.usedSittings,
+                            remainingSittings: result.remainingSittings
+                        };
+
+                        console.log('Generating redemption invoice with:', {
+                            totalSittings: customerPkg.totalSittings,
+                            usedSittings: customerPkg.usedSittings,
+                            remainingSittings: customerPkg.remainingSittings,
+                            staffName: redeemSittingsForm.staffName
+                        });
+
+                        // Generate invoice image for redemption with staff name
+                        const invoiceImage = await generateBrandedSittingsInvoiceImage(
+                            customerPkg,
+                            template,
+                            outlet,
+                            redeemSittingsForm.staffName
+                        );
+
+                        // Show preview modal
+                        setWhatsAppImageData(invoiceImage);
+                        setWhatsAppPackage(customerPkg);
+                        setShowWhatsAppPreview(true);
+                    } catch (error) {
+                        console.error('Error generating invoice:', error);
+                        showMessage('Sitting redeemed! (Could not generate invoice)', 'success');
+                    }
+                } else {
+                    showMessage('Sitting redeemed successfully!', 'success');
+                }
+
+                setRedeemSittingsForm({
+                    customerSittingsPackageId: '',
+                    staffId: '',
+                    staffName: '',
+                    redemptionDate: new Date().toISOString().split('T')[0]
+                });
+
+                setTimeout(() => {
+                    loadData();
+                }, 1000);
+            } else {
+                showMessage('Failed to redeem sitting', 'error');
+            }
+        } catch (error) {
+            console.error('Error redeeming sitting:', error);
+            showMessage('Error redeeming sitting', 'error');
+        }
+    };
+
+    // Helper functions for Assign Sittings Service Items
+    const handleAddAssignSittingsServiceItem = () => {
+        setAssignSittingsServiceItems([...assignSittingsServiceItems, { serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
+    };
+
+    const handleRemoveAssignSittingsServiceItem = (index: number) => {
+        if (assignSittingsServiceItems.length > 1) {
+            setAssignSittingsServiceItems(assignSittingsServiceItems.filter((_, i) => i !== index));
+        }
+    };
+
+    const handleAssignSittingsServiceItemChange = (index: number, field: string, value: string | number) => {
+        const newItems = [...assignSittingsServiceItems];
+        newItems[index] = { ...newItems[index], [field]: value };
+
+        if (field === 'serviceName' && typeof value === 'string') {
+            const matchingService = services.find(s => s.name.toLowerCase() === value.toLowerCase());
+            if (matchingService) {
+                newItems[index].serviceId = matchingService.id;
+                newItems[index].price = matchingService.price;
+            }
+        }
+
+        if (field === 'staffName' && typeof value === 'string') {
+            const matchingStaff = staff.find(s => s.name.toLowerCase() === value.toLowerCase());
+            if (matchingStaff) {
+                newItems[index].staffId = matchingStaff.id;
+            }
+        }
+
+        if (field === 'quantity' || field === 'price') {
+            newItems[index].total = newItems[index].quantity * newItems[index].price;
+        }
+
+        if (field === 'serviceName') {
+            newItems[index].total = newItems[index].quantity * newItems[index].price;
+        }
+
+        setAssignSittingsServiceItems(newItems);
+    };
+
+    // Helper functions for Redeem Sittings Service Items
+    const handleAddRedeemSittingsServiceItem = () => {
+        setRedeemSittingsServiceItems([...redeemSittingsServiceItems, { serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
+    };
+
+    const handleRemoveRedeemSittingsServiceItem = (index: number) => {
+        if (redeemSittingsServiceItems.length > 1) {
+            setRedeemSittingsServiceItems(redeemSittingsServiceItems.filter((_, i) => i !== index));
+        }
+    };
+
+    const handleRedeemSittingsServiceItemChange = (index: number, field: string, value: string | number) => {
+        const newItems = [...redeemSittingsServiceItems];
+        newItems[index] = { ...newItems[index], [field]: value };
+
+        if (field === 'serviceName' && typeof value === 'string') {
+            const matchingService = services.find(s => s.name.toLowerCase() === value.toLowerCase());
+            if (matchingService) {
+                newItems[index].serviceId = matchingService.id;
+                newItems[index].price = matchingService.price;
+            }
+        }
+
+        if (field === 'staffName' && typeof value === 'string') {
+            const matchingStaff = staff.find(s => s.name.toLowerCase() === value.toLowerCase());
+            if (matchingStaff) {
+                newItems[index].staffId = matchingStaff.id;
+            }
+        }
+
+        if (field === 'quantity' || field === 'price') {
+            newItems[index].total = newItems[index].quantity * newItems[index].price;
+        }
+
+        if (field === 'serviceName') {
+            newItems[index].total = newItems[index].quantity * newItems[index].price;
+        }
+
+        setRedeemSittingsServiceItems(newItems);
+    };
+
     const calculateServiceSubtotal = (items: Array<{ total: number }>) => {
         return items.reduce((sum, item) => sum + item.total, 0);
     };
@@ -666,31 +1095,85 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 </div>
             )}
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-200">
-                <button
-                    onClick={() => setActiveTab('assign')}
-                    className={`px-4 py-3 font-semibold transition-colors border-b-2 ${activeTab === 'assign'
-                        ? 'border-brand-primary text-brand-primary'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
-                        }`}
-                >
-                    Assign Package
-                </button>
-                <button
-                    onClick={() => setActiveTab('redeem')}
-                    className={`px-4 py-3 font-semibold transition-colors border-b-2 ${activeTab === 'redeem'
-                        ? 'border-brand-primary text-brand-primary'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
-                        }`}
-                >
-                    Redeem Package
-                </button>
+            {/* Package Type and Tabs Container */}
+            <div className="space-y-4">
+                {/* Package Type Switcher */}
+                <div className="flex gap-6 border-b-2 border-gray-200 overflow-x-auto">
+                    <div className="flex flex-col">
+                        <button
+                            onClick={() => setActivePackageType('value')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 ${activePackageType === 'value'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Value Packages
+                        </button>
+                    </div>
+                    <div className="flex flex-col">
+                        <button
+                            onClick={() => setActivePackageType('sittings')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 ${activePackageType === 'sittings'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Sittings Packages
+                        </button>
+                    </div>
+                </div>
+
+                {/* Sub-tabs for each package type */}
+                {activePackageType === 'value' && (
+                    <div className="flex gap-2 border-b border-gray-200">
+                        <button
+                            onClick={() => setActiveTab('assign')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 text-sm ${activeTab === 'assign'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Assign Value Package
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('redeem')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 text-sm ${activeTab === 'redeem'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Redeem Value Package
+                        </button>
+                    </div>
+                )}
+
+                {activePackageType === 'sittings' && (
+                    <div className="flex gap-2 border-b border-gray-200">
+                        <button
+                            onClick={() => setActiveTab('assign')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 text-sm ${activeTab === 'assign'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Assign Sittings Package
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('redeem')}
+                            className={`px-4 py-3 font-semibold transition-colors border-b-2 text-sm ${activeTab === 'redeem'
+                                ? 'border-brand-primary text-brand-primary'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Redeem Sittings Package
+                        </button>
+                    </div>
+                )}
             </div>
 
             <>
-                {/* Assign Package Tab */}
-                {activeTab === 'assign' && (
+                {/* Assign Package Tab - Value Packages Only */}
+                {activePackageType === 'value' && activeTab === 'assign' && (
                     <>
                         {!showAssignForm ? (
                             <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
@@ -750,6 +1233,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                             onChange={(e) => setAssignForm(prev => ({ ...prev, assignedDate: e.target.value }))}
                                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900"
                                         />
+                                    </div>
+
+                                    {/* Service Name - Searchable */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Service Name (Optional)</label>
+                                        <input
+                                            type="text"
+                                            list="assign-service-list"
+                                            value={assignForm.serviceName || ''}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                const matchingService = services.find(s => s.name.toLowerCase() === value.toLowerCase());
+                                                setAssignForm(prev => ({
+                                                    ...prev,
+                                                    serviceName: value,
+                                                    serviceId: matchingService?.id || '',
+                                                    serviceValue: matchingService?.price || 0
+                                                }));
+                                            }}
+                                            placeholder="Type to search services"
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                        />
+                                        <datalist id="assign-service-list">
+                                            {services && services.map(service => (
+                                                <option key={service.id} value={service.name}>
+                                                    {service.name} - ₹{service.price.toFixed(2)}
+                                                </option>
+                                            ))}
+                                        </datalist>
                                     </div>
 
                                     {/* Package Selection */}
@@ -1007,8 +1519,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     </div>
                 )}
 
-                {/* All Customer Packages Table - Assign Tab */}
-                {activeTab === 'assign' && (
+                {/* All Customer Packages Table - Assign Tab (Value Packages Only) */}
+                {activePackageType === 'value' && activeTab === 'assign' && (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 mt-8">
                         <h2 className="text-2xl font-bold mb-6 text-gray-900">All Customer Packages</h2>
                         {customerPackages.length === 0 ? (
@@ -1072,276 +1584,549 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     </div>
                 )}
 
-                {/* Redeem Services Tab */}
-                {activeTab === 'redeem' && (
+                {/* Value Packages Section */}
+                {activePackageType === 'value' && (
                     <>
-                        {!showRedeemForm ? (
-                            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                                <h2 className="text-2xl font-bold mb-6 text-gray-900">Redeem Services from Package</h2>
-                                <button
-                                    onClick={() => setShowRedeemForm(true)}
-                                    className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
-                                >
-                                    + Redeem Package
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                {/* Search Section */}
-                                <div className="bg-white rounded-lg border border-gray-200 p-8">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h2 className="text-2xl font-bold text-gray-900">Redeem from Package</h2>
+                        {/* Redeem Services Tab */}
+                        {activeTab === 'redeem' && (
+                            <>
+                                {!showRedeemForm ? (
+                                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                                        <h2 className="text-2xl font-bold mb-6 text-gray-900">Redeem Services from Package</h2>
                                         <button
-                                            onClick={() => setShowRedeemForm(false)}
-                                            className="text-gray-500 hover:text-gray-700 text-2xl"
+                                            onClick={() => setShowRedeemForm(true)}
+                                            className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
                                         >
-                                            ✕
+                                            + Redeem Package
                                         </button>
                                     </div>
-
-                                    {/* Search Box */}
-                                    <div className="mb-6">
-                                        <input
-                                            type="text"
-                                            placeholder="Search by name or mobile..."
-                                            value={redeemSearchQuery}
-                                            onChange={(e) => setRedeemSearchQuery(e.target.value)}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
-                                        />
-                                    </div>
-
-                                    {/* Customer Packages Table */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">My Outlet's Customer Packages</h3>
-                                        {filteredCustomerPackages.length === 0 ? (
-                                            <p className="text-gray-500 text-center py-8">
-                                                {redeemSearchQuery ? 'No packages found matching your search' : 'No customer packages available'}
-                                            </p>
-                                        ) : (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-gray-100 border-b-2 border-gray-300">
-                                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
-                                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
-                                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package Details</th>
-                                                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Value</th>
-                                                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
-                                                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {filteredCustomerPackages.map((pkg) => {
-                                                            const template = packages.find(p => p.id === pkg.packageTemplateId);
-                                                            return (
-                                                                <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                                                    <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
-                                                                    <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
-                                                                    <td className="px-4 py-4 text-sm text-gray-600">
-                                                                        {template ? `Pay ₹${template.packageValue} Get ₹${template.serviceValue}` : 'N/A'}
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-sm text-right">
-                                                                        <span className="font-semibold text-green-600">₹{pkg.remainingServiceValue.toFixed(2)}</span>
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-sm text-gray-600">
-                                                                        {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
-                                                                    </td>
-                                                                    <td className="px-4 py-4 text-sm text-center space-x-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setRedeemForm(prev => ({ ...prev, packageId: pkg.id }));
-                                                                                setRedeemSearchQuery('');
-                                                                                // Scroll to form
-                                                                                document.getElementById('redeem-form')?.scrollIntoView({ behavior: 'smooth' });
-                                                                            }}
-                                                                            className="px-3 py-1 bg-brand-primary text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                                        >
-                                                                            Redeem
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                if (template && outlets.find(o => o.id === userOutletId)) {
-                                                                                    previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
-                                                                                }
-                                                                            }}
-                                                                            className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                                        >
-                                                                            View Invoice
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => showRedeemHistory(pkg.id)}
-                                                                            className="px-3 py-1 bg-gray-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                                        >
-                                                                            History
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                    </tbody>
-                                                </table>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Search Section */}
+                                        <div className="bg-white rounded-lg border border-gray-200 p-8">
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h2 className="text-2xl font-bold text-gray-900">Redeem from Package</h2>
+                                                <button
+                                                    onClick={() => setShowRedeemForm(false)}
+                                                    className="text-gray-500 hover:text-gray-700 text-2xl"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
 
-                                {/* Redeem Form */}
-                                {redeemForm.packageId && (
-                                    <div id="redeem-form" className="bg-white rounded-lg border border-gray-200 p-8">
-                                        <h3 className="text-2xl font-bold mb-6 text-gray-900">Redeem from Package</h3>
-
-                                        <form onSubmit={handleRedeemService} className="space-y-6">
-                                            {/* Selected Package Info */}
-                                            {customerPackages.find(p => p.id === redeemForm.packageId) && (
-                                                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                                                                {customerPackages.find(p => p.id === redeemForm.packageId)?.customerName}
-                                                            </h4>
-                                                            <p className="text-gray-600">
-                                                                Balance: <span className="font-bold text-green-600">₹{customerPackages.find(p => p.id === redeemForm.packageId)?.remainingServiceValue.toFixed(2)}</span>
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setRedeemForm(prev => ({ ...prev, packageId: '' }))}
-                                                            className="text-brand-primary hover:underline text-sm font-medium"
-                                                        >
-                                                            Change
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Redemption Date */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">Redemption Date</label>
+                                            {/* Search Box */}
+                                            <div className="mb-6">
                                                 <input
-                                                    type="date"
-                                                    value={redeemForm.redemptionDate}
-                                                    onChange={(e) => setRedeemForm(prev => ({ ...prev, redemptionDate: e.target.value }))}
+                                                    type="text"
+                                                    placeholder="Search by name or mobile..."
+                                                    value={redeemSearchQuery}
+                                                    onChange={(e) => setRedeemSearchQuery(e.target.value)}
                                                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
                                                 />
                                             </div>
 
-                                            {/* Service Items */}
+                                            {/* Customer Packages Table */}
                                             <div>
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <label className="block text-sm font-medium text-gray-700">
-                                                        Services to Redeem
-                                                    </label>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleAddRedeemServiceItem}
-                                                        className="text-sm text-brand-primary hover:underline font-medium"
-                                                    >
-                                                        + Add Service
-                                                    </button>
-                                                </div>
+                                                <h3 className="text-lg font-semibold text-gray-900 mb-4">My Outlet's Customer Packages</h3>
+                                                {filteredCustomerPackages.length === 0 ? (
+                                                    <p className="text-gray-500 text-center py-8">
+                                                        {redeemSearchQuery ? 'No packages found matching your search' : 'No customer packages available'}
+                                                    </p>
+                                                ) : (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse">
+                                                            <thead>
+                                                                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package Details</th>
+                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Value</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
+                                                                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {filteredCustomerPackages.map((pkg) => {
+                                                                    const template = packages.find(p => p.id === pkg.packageTemplateId);
+                                                                    return (
+                                                                        <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                                            <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-600">
+                                                                                {template ? `Pay ₹${template.packageValue} Get ₹${template.serviceValue}` : 'N/A'}
+                                                                            </td>
+                                                                            <td className="px-4 py-4 text-sm text-right">
+                                                                                <span className="font-semibold text-green-600">₹{pkg.remainingServiceValue.toFixed(2)}</span>
+                                                                            </td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-600">
+                                                                                {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
+                                                                            </td>
+                                                                            <td className="px-4 py-4 text-sm text-center space-x-2">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setRedeemForm(prev => ({ ...prev, packageId: pkg.id }));
+                                                                                        setRedeemSearchQuery('');
+                                                                                        // Scroll to form
+                                                                                        document.getElementById('redeem-form')?.scrollIntoView({ behavior: 'smooth' });
+                                                                                    }}
+                                                                                    className="px-3 py-1 bg-brand-primary text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                                                >
+                                                                                    Redeem
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        if (template && outlets.find(o => o.id === userOutletId)) {
+                                                                                            previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                                                >
+                                                                                    View Invoice
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => showRedeemHistory(pkg.id)}
+                                                                                    className="px-3 py-1 bg-gray-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                                                >
+                                                                                    History
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
 
-                                                <div className="space-y-4">
-                                                    {redeemServiceItems.map((item, index) => (
-                                                        <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg border border-gray-300">
-                                                            <div className="md:col-span-3">
-                                                                <label className="block text-xs text-gray-600 mb-1">Staff Name</label>
-                                                                <select
-                                                                    value={item.staffName}
-                                                                    onChange={(e) => handleRedeemServiceItemChange(index, 'staffName', e.target.value)}
-                                                                    className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                >
-                                                                    <option value="">Select staff (optional)</option>
-                                                                    {staff && staff.length > 0 ? (
-                                                                        staff.map(staffMember => (
-                                                                            <option key={staffMember.id} value={staffMember.name}>
-                                                                                {staffMember.name}
-                                                                            </option>
-                                                                        ))
-                                                                    ) : (
-                                                                        <option disabled>No staff available</option>
-                                                                    )}
-                                                                </select>
-                                                            </div>
+                                        {/* Redeem Form */}
+                                        {redeemForm.packageId && (
+                                            <div id="redeem-form" className="bg-white rounded-lg border border-gray-200 p-8">
+                                                <h3 className="text-2xl font-bold mb-6 text-gray-900">Redeem from Package</h3>
 
-                                                            <div className="md:col-span-3">
-                                                                <label className="block text-xs text-gray-600 mb-1">Service Name *</label>
-                                                                <input
-                                                                    type="text"
-                                                                    list={`services-list-redeem-${index}`}
-                                                                    value={item.serviceName}
-                                                                    onChange={(e) => {
-                                                                        const selectedService = services.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
-                                                                        const newItems = [...redeemServiceItems];
-                                                                        newItems[index].serviceName = e.target.value;
-                                                                        if (selectedService) {
-                                                                            newItems[index].serviceId = selectedService.id;
-                                                                            newItems[index].price = selectedService.price;
-                                                                            newItems[index].total = newItems[index].quantity * selectedService.price;
-                                                                        } else {
-                                                                            newItems[index].serviceId = '';
-                                                                        }
-                                                                        setRedeemServiceItems(newItems);
-                                                                    }}
-                                                                    className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                    placeholder="Type or select service"
-                                                                    required
-                                                                />
-                                                                <datalist id={`services-list-redeem-${index}`}>
-                                                                    {services.map(service => (
-                                                                        <option key={service.id} value={service.name}>
-                                                                            {service.name} - ₹{service.price.toFixed(2)}
-                                                                        </option>
-                                                                    ))}
-                                                                </datalist>
-                                                            </div>
-
-                                                            <div className="md:col-span-2">
-                                                                <label className="block text-xs text-gray-600 mb-1">Quantity *</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => handleRedeemServiceItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
-                                                                    min="1"
-                                                                    className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                    required
-                                                                />
-                                                            </div>
-
-                                                            <div className="md:col-span-2">
-                                                                <label className="block text-xs text-gray-600 mb-1">Price (₹) *</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={item.price}
-                                                                    onChange={(e) => handleRedeemServiceItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                    required
-                                                                />
-                                                            </div>
-
-                                                            <div className="md:col-span-2">
-                                                                <label className="block text-xs text-gray-600 mb-1">Total (₹)</label>
-                                                                <div className="font-semibold text-gray-900">₹{item.total.toFixed(2)}</div>
-                                                            </div>
-
-                                                            {redeemServiceItems.length > 1 && (
-                                                                <div className="md:col-span-1">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleRemoveRedeemServiceItem(index)}
-                                                                        className="w-full bg-red-100 text-red-600 p-2 rounded hover:bg-red-200 transition-colors"
-                                                                    >
-                                                                        🗑
-                                                                    </button>
+                                                <form onSubmit={handleRedeemService} className="space-y-6">
+                                                    {/* Selected Package Info */}
+                                                    {customerPackages.find(p => p.id === redeemForm.packageId) && (
+                                                        <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                                                                        {customerPackages.find(p => p.id === redeemForm.packageId)?.customerName}
+                                                                    </h4>
+                                                                    <p className="text-gray-600">
+                                                                        Balance: <span className="font-bold text-green-600">₹{customerPackages.find(p => p.id === redeemForm.packageId)?.remainingServiceValue.toFixed(2)}</span>
+                                                                    </p>
                                                                 </div>
-                                                            )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setRedeemForm(prev => ({ ...prev, packageId: '' }))}
+                                                                    className="text-brand-primary hover:underline text-sm font-medium"
+                                                                >
+                                                                    Change
+                                                                </button>
+                                                            </div>
                                                         </div>
+                                                    )}
+
+                                                    {/* Redemption Date */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">Redemption Date</label>
+                                                        <input
+                                                            type="date"
+                                                            value={redeemForm.redemptionDate}
+                                                            onChange={(e) => setRedeemForm(prev => ({ ...prev, redemptionDate: e.target.value }))}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                        />
+                                                    </div>
+
+                                                    {/* Service Items */}
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <label className="block text-sm font-medium text-gray-700">
+                                                                Services to Redeem
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAddRedeemServiceItem}
+                                                                className="text-sm text-brand-primary hover:underline font-medium"
+                                                            >
+                                                                + Add Service
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="space-y-4">
+                                                            {redeemServiceItems.map((item, index) => (
+                                                                <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg border border-gray-300">
+                                                                    <div className="md:col-span-3">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Staff Name</label>
+                                                                        <select
+                                                                            value={item.staffName}
+                                                                            onChange={(e) => handleRedeemServiceItemChange(index, 'staffName', e.target.value)}
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        >
+                                                                            <option value="">Select staff (optional)</option>
+                                                                            {staff && staff.length > 0 ? (
+                                                                                staff.map(staffMember => (
+                                                                                    <option key={staffMember.id} value={staffMember.name}>
+                                                                                        {staffMember.name}
+                                                                                    </option>
+                                                                                ))
+                                                                            ) : (
+                                                                                <option disabled>No staff available</option>
+                                                                            )}
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div className="md:col-span-3">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Service Name *</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            list={`services-list-redeem-${index}`}
+                                                                            value={item.serviceName}
+                                                                            onChange={(e) => {
+                                                                                const selectedService = services.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
+                                                                                const newItems = [...redeemServiceItems];
+                                                                                newItems[index].serviceName = e.target.value;
+                                                                                if (selectedService) {
+                                                                                    newItems[index].serviceId = selectedService.id;
+                                                                                    newItems[index].price = selectedService.price;
+                                                                                    newItems[index].total = newItems[index].quantity * selectedService.price;
+                                                                                } else {
+                                                                                    newItems[index].serviceId = '';
+                                                                                }
+                                                                                setRedeemServiceItems(newItems);
+                                                                            }}
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            placeholder="Type or select service"
+                                                                            required
+                                                                        />
+                                                                        <datalist id={`services-list-redeem-${index}`}>
+                                                                            {services.map(service => (
+                                                                                <option key={service.id} value={service.name}>
+                                                                                    {service.name} - ₹{service.price.toFixed(2)}
+                                                                                </option>
+                                                                            ))}
+                                                                        </datalist>
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Quantity *</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => handleRedeemServiceItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                                                                            min="1"
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            required
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Price (₹) *</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.price}
+                                                                            onChange={(e) => handleRedeemServiceItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            required
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Total (₹)</label>
+                                                                        <div className="font-semibold text-gray-900">₹{item.total.toFixed(2)}</div>
+                                                                    </div>
+
+                                                                    {redeemServiceItems.length > 1 && (
+                                                                        <div className="md:col-span-1">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleRemoveRedeemServiceItem(index)}
+                                                                                className="w-full bg-red-100 text-red-600 p-2 rounded hover:bg-red-200 transition-colors"
+                                                                            >
+                                                                                🗑
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* GST Percentage */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            GST Percentage
+                                                        </label>
+                                                        <select
+                                                            value={redeemForm.gstPercentage}
+                                                            onChange={(e) => setRedeemForm(prev => ({ ...prev, gstPercentage: parseInt(e.target.value) }))}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                        >
+                                                            <option value={0}>0% (No GST)</option>
+                                                            <option value={5}>5% GST</option>
+                                                            <option value={12}>12% GST</option>
+                                                            <option value={18}>18% GST</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Calculation Summary */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2 mt-4">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">Subtotal (Before GST):</span>
+                                                            <span className="font-semibold text-gray-900">₹{(calculateServiceSubtotal(redeemServiceItems) || 0).toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">GST ({redeemForm.gstPercentage}%):</span>
+                                                            <span className="font-semibold text-gray-900">₹{((calculateServiceSubtotal(redeemServiceItems) || 0) * redeemForm.gstPercentage / 100).toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-300">
+                                                            <span className="text-gray-900">Total:</span>
+                                                            <span className="text-green-600">₹{((calculateServiceSubtotal(redeemServiceItems) || 0) + (calculateServiceSubtotal(redeemServiceItems) || 0) * redeemForm.gstPercentage / 100).toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Submit Button */}
+                                                    <button
+                                                        type="submit"
+                                                        disabled={loading}
+                                                        className="w-full bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                                    >
+                                                        {loading ? 'Redeeming...' : 'Redeem & Generate Bill'}
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+
+                {/* Sittings Packages Section */}
+                {activePackageType === 'sittings' && (
+                    <>
+                        {/* Assign Sittings Tab */}
+                        {activeTab === 'assign' && (
+                            <>
+                                {/* Assign New Sittings Package Button - At Top */}
+                                {!showAssignSittingsForm ? (
+                                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center mb-8">
+                                        <h2 className="text-2xl font-bold mb-6 text-gray-900">Assign New Sittings Package</h2>
+                                        <button
+                                            onClick={() => setShowAssignSittingsForm(true)}
+                                            className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
+                                        >
+                                            Assign New Sittings Package
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-lg border border-gray-200 p-8">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h2 className="text-2xl font-bold text-gray-900">Assign New Sittings Package</h2>
+                                            <button
+                                                onClick={() => setShowAssignSittingsForm(false)}
+                                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+
+                                        <form onSubmit={handleAssignSittingsPackage} className="space-y-6">
+                                            {/* Customer Mobile - FIRST FIELD */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Customer Mobile *
+                                                </label>
+                                                <input
+                                                    type="tel"
+                                                    value={assignSittingsForm.customerMobile}
+                                                    onChange={(e) => handleMobileNumberChange(e.target.value, true)}
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                    placeholder="10-digit mobile number"
+                                                    required
+                                                />
+                                                {isLookingUpCustomer && (
+                                                    <p className="text-sm text-gray-500 mt-2">Looking up customer...</p>
+                                                )}
+                                            </div>
+
+                                            {/* Customer Name - Auto-populated from mobile lookup */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Customer Name *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={assignSittingsForm.customerName}
+                                                    onChange={(e) => setAssignSittingsForm(prev => ({ ...prev, customerName: e.target.value }))}
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                    placeholder="Auto-populated from mobile lookup or enter name"
+                                                    required
+                                                />
+                                            </div>
+
+                                            {/* Select Package */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Select Package *
+                                                </label>
+                                                <select
+                                                    value={assignSittingsForm.sittingsPackageId}
+                                                    onChange={(e) => {
+                                                        const template = sittingsTemplates.find(t => t.id === e.target.value);
+                                                        if (template && template.serviceName) {
+                                                            const matchingService = services.find(s => s.name.toLowerCase() === template.serviceName?.toLowerCase());
+                                                            setAssignSittingsForm(prev => ({
+                                                                ...prev,
+                                                                sittingsPackageId: e.target.value,
+                                                                serviceId: template.serviceId || matchingService?.id || '',
+                                                                serviceName: template.serviceName || '',
+                                                                serviceValue: matchingService?.price || 0
+                                                            }));
+                                                        } else {
+                                                            setAssignSittingsForm(prev => ({
+                                                                ...prev,
+                                                                sittingsPackageId: e.target.value,
+                                                                serviceId: '',
+                                                                serviceName: '',
+                                                                serviceValue: 0
+                                                            }));
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                    required
+                                                >
+                                                    <option value="">-- Select a package --</option>
+                                                    {sittingsTemplates.map(template => (
+                                                        <option key={template.id} value={template.id}>
+                                                            {template.name}
+                                                        </option>
                                                     ))}
-                                                </div>
+                                                </select>
+                                            </div>
+
+                                            {/* Service Details (Auto-populated from Database) */}
+                                            {assignSittingsForm.sittingsPackageId && (() => {
+                                                const selectedPackage = sittingsTemplates.find(p => p.id === assignSittingsForm.sittingsPackageId);
+                                                const totalSittings = (selectedPackage?.paidSittings || 0) + (selectedPackage?.freeSittings || 0);
+                                                return (
+                                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                Service Name *
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                list="sittings-service-list"
+                                                                value={assignSittingsForm.serviceName}
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value;
+                                                                    const matchingService = services.find(s => s.name.toLowerCase() === value.toLowerCase());
+                                                                    setAssignSittingsForm(prev => ({
+                                                                        ...prev,
+                                                                        serviceName: value,
+                                                                        serviceId: matchingService?.id || '',
+                                                                        serviceValue: matchingService?.price || 0
+                                                                    }));
+                                                                }}
+                                                                placeholder="Type to search services"
+                                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                                required
+                                                            />
+                                                            <datalist id="sittings-service-list">
+                                                                {services && services.map(service => (
+                                                                    <option key={service.id} value={service.name}>
+                                                                        {service.name} - ₹{service.price.toFixed(2)}
+                                                                    </option>
+                                                                ))}
+                                                            </datalist>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                Service Value (₹)
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                value={assignSittingsForm.serviceValue.toFixed(2)}
+                                                                readOnly
+                                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                Quantity (Actual Sittings)
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                value={selectedPackage?.paidSittings || 0}
+                                                                readOnly
+                                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                Sittings (Paid + Free)
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={`${selectedPackage?.paidSittings || 0}+${selectedPackage?.freeSittings || 0}`}
+                                                                readOnly
+                                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* Total Summary */}
+                                            {assignSittingsForm.sittingsPackageId && assignSittingsForm.serviceName && (() => {
+                                                const selectedPackage = sittingsTemplates.find(p => p.id === assignSittingsForm.sittingsPackageId);
+                                                const paidSittings = selectedPackage?.paidSittings || 0;
+                                                const subtotal = assignSittingsForm.serviceValue * paidSittings;
+                                                const gst = (subtotal * assignSittingsForm.gstPercentage) / 100;
+                                                const total = subtotal + gst;
+                                                return (
+                                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                                        <div className="space-y-2">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Service Value × Quantity:</span>
+                                                                <span className="font-semibold text-gray-900">₹{subtotal.toFixed(2)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">GST ({assignSittingsForm.gstPercentage}%):</span>
+                                                                <span className="font-semibold text-gray-900">₹{gst.toFixed(2)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between text-lg font-bold pt-2 border-t border-blue-300">
+                                                                <span className="text-gray-900">Total:</span>
+                                                                <span className="text-green-600">₹{total.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* Assigned Date */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Assigned Date
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={assignSittingsForm.assignedDate}
+                                                    onChange={(e) => setAssignSittingsForm(prev => ({ ...prev, assignedDate: e.target.value }))}
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                />
                                             </div>
 
                                             {/* GST Percentage */}
@@ -1350,8 +2135,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                     GST Percentage
                                                 </label>
                                                 <select
-                                                    value={redeemForm.gstPercentage}
-                                                    onChange={(e) => setRedeemForm(prev => ({ ...prev, gstPercentage: parseInt(e.target.value) }))}
+                                                    value={assignSittingsForm.gstPercentage}
+                                                    onChange={(e) => setAssignSittingsForm(prev => ({ ...prev, gstPercentage: parseInt(e.target.value) }))}
                                                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
                                                 >
                                                     <option value={0}>0% (No GST)</option>
@@ -1361,20 +2146,103 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                 </select>
                                             </div>
 
-                                            {/* Calculation Summary */}
-                                            <div className="bg-gray-50 p-4 rounded-lg space-y-2 mt-4">
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">Subtotal (Before GST):</span>
-                                                    <span className="font-semibold text-gray-900">₹{(calculateServiceSubtotal(redeemServiceItems) || 0).toFixed(2)}</span>
+                                            {/* Initial Sittings - Service Items Table (Optional) */}
+                                            <div className="col-span-full">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <label className="block text-sm font-semibold text-gray-700">
+                                                        Initial Sitting (Optional)
+                                                    </label>
+                                                    {assignSittingsServiceItems.length > 0 && assignSittingsServiceItems[0].staffName && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setAssignSittingsServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }])}
+                                                            className="text-sm text-red-600 hover:text-red-700 font-medium"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
                                                 </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">GST ({redeemForm.gstPercentage}%):</span>
-                                                    <span className="font-semibold text-gray-900">₹{((calculateServiceSubtotal(redeemServiceItems) || 0) * redeemForm.gstPercentage / 100).toFixed(2)}</span>
+                                                
+                                                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                                    <table className="w-full">
+                                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Staff Name</th>
+                                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Service Name</th>
+                                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Quantity</th>
+                                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Price (₹)</th>
+                                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Total (₹)</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {assignSittingsServiceItems.map((item, index) => (
+                                                                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                                                                    <td className="px-4 py-3">
+                                                                        <select
+                                                                            value={item.staffName}
+                                                                            onChange={(e) => {
+                                                                                const staffMember = staff.find(s => s.name === e.target.value);
+                                                                                handleAssignSittingsServiceItemChange(index, 'staffName', e.target.value);
+                                                                                if (staffMember) {
+                                                                                    const newItems = [...assignSittingsServiceItems];
+                                                                                    newItems[index].staffId = staffMember.id;
+                                                                                    setAssignSittingsServiceItems(newItems);
+                                                                                }
+                                                                            }}
+                                                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        >
+                                                                            <option value="">-- Select staff --</option>
+                                                                            {staff && staff.map(s => (
+                                                                                <option key={s.id} value={s.name}>{s.name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={item.serviceName}
+                                                                            onChange={(e) => handleAssignSittingsServiceItemChange(index, 'serviceName', e.target.value)}
+                                                                            list="servicesListAssignSittings"
+                                                                            placeholder="Type service name"
+                                                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        />
+                                                                        <datalist id="servicesListAssignSittings">
+                                                                            {services && services.map(s => (
+                                                                                <option key={s.id} value={s.name} />
+                                                                            ))}
+                                                                        </datalist>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => handleAssignSittingsServiceItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                                                                            min="1"
+                                                                            className="w-20 px-3 py-2 border border-gray-300 rounded text-center text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        />
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.price}
+                                                                            onChange={(e) => handleAssignSittingsServiceItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            className="w-24 px-3 py-2 border border-gray-300 rounded text-right text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        />
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                                                                        ₹{item.total.toFixed(2)}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
-                                                <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-300">
-                                                    <span className="text-gray-900">Total:</span>
-                                                    <span className="text-green-600">₹{((calculateServiceSubtotal(redeemServiceItems) || 0) + (calculateServiceSubtotal(redeemServiceItems) || 0) * redeemForm.gstPercentage / 100).toFixed(2)}</span>
-                                                </div>
+                                                
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    Optional: Add the first sitting service details. Leave empty if no sitting is redeemed during assignment.
+                                                </p>
                                             </div>
 
                                             {/* Submit Button */}
@@ -1383,12 +2251,331 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                 disabled={loading}
                                                 className="w-full bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                                             >
-                                                {loading ? 'Redeeming...' : 'Redeem & Generate Bill'}
+                                                {loading ? 'Assigning...' : 'Assign Sittings Package'}
                                             </button>
                                         </form>
+
+                                        {/* Last Assigned Package Display */}
+                                        {lastAssignedSittingsPackage && (
+                                            <div className="mt-8 pt-8 border-t border-gray-200">
+                                                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recently Assigned</h3>
+                                                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="text-gray-600 text-sm">Customer</p>
+                                                            <p className="text-xl font-bold text-gray-900">{lastAssignedSittingsPackage.customerName}</p>
+                                                            <p className="text-gray-600 text-sm mt-2">{lastAssignedSittingsPackage.customerMobile}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-gray-600 text-sm">Total Sittings</p>
+                                                            <p className="text-2xl font-bold text-green-600">{lastAssignedSittingsPackage.totalSittings}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                            </div>
+                            </>
+                        )}
+
+                        {/* Redeem Sittings Tab */}
+                        {activeTab === 'redeem' && (
+                            <>
+                                {!showRedeemSittingsForm ? (
+                                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                                        <h2 className="text-2xl font-bold mb-6 text-gray-900">Redeem Sittings from Package</h2>
+                                        <button
+                                            onClick={() => setShowRedeemSittingsForm(true)}
+                                            className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
+                                        >
+                                            + Redeem Sittings Package
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Search Section */}
+                                        <div className="bg-white rounded-lg border border-gray-200 p-8">
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h2 className="text-2xl font-bold text-gray-900">Redeem from Sittings Package</h2>
+                                                <button
+                                                    onClick={() => setShowRedeemSittingsForm(false)}
+                                                    className="text-gray-500 hover:text-gray-700 text-2xl"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+
+                                            {/* Search Box */}
+                                            <div className="mb-6">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search by name or mobile..."
+                                                    value={redeemSearchQuerySittings}
+                                                    onChange={(e) => setRedeemSearchQuerySittings(e.target.value)}
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                />
+                                            </div>
+
+                                            {/* Customer Sittings Packages Table */}
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-gray-900 mb-4">My Outlet's Customer Sittings Packages</h3>
+                                                {filteredCustomerSittingsPackages.length === 0 ? (
+                                                    <p className="text-gray-500 text-center py-8">
+                                                        {redeemSearchQuerySittings ? 'No packages found matching your search' : 'No customer sittings packages available'}
+                                                    </p>
+                                                ) : (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse">
+                                                            <thead>
+                                                                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
+                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total Sittings</th>
+                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Used Sittings</th>
+                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Sittings</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
+                                                                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {filteredCustomerSittingsPackages.map((pkg) => (
+                                                                    <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                                        <td className="px-4 py-4 text-sm text-right font-semibold text-gray-900">{pkg.totalSittings}</td>
+                                                                        <td className="px-4 py-4 text-sm text-right font-semibold text-gray-900">{pkg.usedSittings}</td>
+                                                                        <td className="px-4 py-4 text-sm text-right">
+                                                                            <span className="font-semibold text-green-600">{pkg.remainingSittings}</span>
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-600">
+                                                                            {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-sm text-center space-x-2">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setRedeemSittingsForm(prev => ({ ...prev, customerSittingsPackageId: pkg.id }));
+                                                                                    setRedeemSearchQuerySittings('');
+                                                                                    document.getElementById('redeem-sittings-form')?.scrollIntoView({ behavior: 'smooth' });
+                                                                                }}
+                                                                                className="px-3 py-1 bg-brand-primary text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
+                                                                            >
+                                                                                Redeem
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Redeem Form */}
+                                        {redeemSittingsForm.customerSittingsPackageId && (
+                                            <div id="redeem-sittings-form" className="bg-white rounded-lg border border-gray-200 p-8">
+                                                <h3 className="text-2xl font-bold mb-6 text-gray-900">Redeem from Sittings Package</h3>
+
+                                                <form onSubmit={handleRedeemSittings} className="space-y-6">
+                                                    {/* Selected Package Info */}
+                                                    {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId) && (
+                                                        <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                                                                        {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.customerName}
+                                                                    </h4>
+                                                                    <p className="text-gray-600">
+                                                                        Remaining: <span className="font-bold text-green-600">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings}</span> sittings
+                                                                    </p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setRedeemSittingsForm(prev => ({ ...prev, customerSittingsPackageId: '' }))}
+                                                                    className="text-brand-primary hover:underline text-sm font-medium"
+                                                                >
+                                                                    Change
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Redemption Date */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">Redemption Date</label>
+                                                        <input
+                                                            type="date"
+                                                            value={redeemSittingsForm.redemptionDate}
+                                                            onChange={(e) => setRedeemSittingsForm(prev => ({ ...prev, redemptionDate: e.target.value }))}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                        />
+                                                    </div>
+
+                                                    {/* Service Items */}
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <label className="block text-sm font-medium text-gray-700">
+                                                                Services to Redeem
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAddRedeemSittingsServiceItem}
+                                                                className="text-sm text-brand-primary hover:underline font-medium"
+                                                            >
+                                                                + Add Service
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="space-y-4">
+                                                            {redeemSittingsServiceItems.map((item, index) => (
+                                                                <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg border border-gray-300">
+                                                                    <div className="md:col-span-3">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Staff Name</label>
+                                                                        <select
+                                                                            value={item.staffName}
+                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'staffName', e.target.value)}
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                        >
+                                                                            <option value="">Select staff (optional)</option>
+                                                                            {staff && staff.length > 0 ? (
+                                                                                staff.map(staffMember => (
+                                                                                    <option key={staffMember.id} value={staffMember.name}>
+                                                                                        {staffMember.name}
+                                                                                    </option>
+                                                                                ))
+                                                                            ) : (
+                                                                                <option disabled>No staff available</option>
+                                                                            )}
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div className="md:col-span-3">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Service Name *</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            list={`sittings-services-list-redeem-${index}`}
+                                                                            value={item.serviceName}
+                                                                            onChange={(e) => {
+                                                                                const selectedService = services.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
+                                                                                const newItems = [...redeemSittingsServiceItems];
+                                                                                newItems[index].serviceName = e.target.value;
+                                                                                if (selectedService) {
+                                                                                    newItems[index].serviceId = selectedService.id;
+                                                                                    newItems[index].price = selectedService.price;
+                                                                                    newItems[index].total = newItems[index].quantity * selectedService.price;
+                                                                                } else {
+                                                                                    newItems[index].serviceId = '';
+                                                                                }
+                                                                                setRedeemSittingsServiceItems(newItems);
+                                                                            }}
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            placeholder="Type or select service"
+                                                                            required
+                                                                        />
+                                                                        <datalist id={`sittings-services-list-redeem-${index}`}>
+                                                                            {services.map(service => (
+                                                                                <option key={service.id} value={service.name}>
+                                                                                    {service.name} - ₹{service.price.toFixed(2)}
+                                                                                </option>
+                                                                            ))}
+                                                                        </datalist>
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Quantity *</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                                                                            min="1"
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            required
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Price (₹) *</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.price}
+                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                                                            required
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="md:col-span-2">
+                                                                        <label className="block text-xs text-gray-600 mb-1">Total (₹)</label>
+                                                                        <div className="font-semibold text-gray-900">₹{item.total.toFixed(2)}</div>
+                                                                    </div>
+
+                                                                    {redeemSittingsServiceItems.length > 1 && (
+                                                                        <div className="md:col-span-1">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleRemoveRedeemSittingsServiceItem(index)}
+                                                                                className="w-full bg-red-100 text-red-600 p-2 rounded hover:bg-red-200 transition-colors"
+                                                                            >
+                                                                                🗑
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* GST Percentage */}
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            GST Percentage
+                                                        </label>
+                                                        <select
+                                                            value={redeemSittingsForm.gstPercentage}
+                                                            onChange={(e) => setRedeemSittingsForm(prev => ({ ...prev, gstPercentage: parseInt(e.target.value) }))}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                        >
+                                                            <option value={0}>0% (No GST)</option>
+                                                            <option value={5}>5% GST</option>
+                                                            <option value={12}>12% GST</option>
+                                                            <option value={18}>18% GST</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Calculation Summary */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2 mt-4">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">Subtotal (Before GST):</span>
+                                                            <span className="font-semibold text-gray-900">₹{(calculateServiceSubtotal(redeemSittingsServiceItems) || 0).toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">GST ({redeemSittingsForm.gstPercentage}%):</span>
+                                                            <span className="font-semibold text-gray-900">₹{((calculateServiceSubtotal(redeemSittingsServiceItems) || 0) * redeemSittingsForm.gstPercentage / 100).toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-300">
+                                                            <span className="text-gray-900">Total:</span>
+                                                            <span className="text-green-600">₹{((calculateServiceSubtotal(redeemSittingsServiceItems) || 0) + (calculateServiceSubtotal(redeemSittingsServiceItems) || 0) * redeemSittingsForm.gstPercentage / 100).toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Submit Button */}
+                                                    <button
+                                                        type="submit"
+                                                        disabled={loading}
+                                                        className="w-full bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                                    >
+                                                        {loading ? 'Redeeming...' : 'Redeem & Generate Bill'}
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </>
                 )}

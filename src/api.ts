@@ -233,6 +233,24 @@ export async function getPackages(): Promise<any[]> {
   return apiRequest('/packages?type=customer_packages');
 }
 
+export async function getPackageTemplates(): Promise<any[]> {
+  return apiRequest('/packages?type=templates');
+}
+
+export async function createPackageTemplate(data: any): Promise<any> {
+  return apiRequest('/packages', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'create_template', ...data }),
+  });
+}
+
+export async function deletePackageTemplate(templateId: string): Promise<void> {
+  return apiRequest('/packages', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'delete_template', id: templateId }),
+  });
+}
+
 // ============ VOUCHERS API ============
 
 export async function getVouchers(): Promise<any[]> {

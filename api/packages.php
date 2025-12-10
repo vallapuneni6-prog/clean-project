@@ -11,6 +11,7 @@ require_once 'helpers/auth.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
 $user = verifyAuthorization(true);
 
 try {
@@ -29,7 +30,8 @@ try {
                     'id' => $t['id'],
                     'name' => $t['name'],
                     'packageValue' => (float)$t['package_value'],
-                    'serviceValue' => (float)$t['service_value']
+                    'serviceValue' => (float)$t['service_value'],
+                    'outletId' => isset($t['outlet_id']) ? $t['outlet_id'] : null
                 ];
             }, $templates);
             
@@ -104,25 +106,70 @@ try {
                 sendError('Service value must be a positive number', 400);
             }
             
+            // Get outletId from request or from user's assigned outlet
+            $outletId = $data['outletId'] ?? '';
+            
+            if (empty($outletId) && !empty($_SESSION['user_id'])) {
+                // Try to get from user_outlets table
+                $stmt = $pdo->prepare("
+                    SELECT outlet_id FROM user_outlets 
+                    WHERE user_id = :userId 
+                    ORDER BY outlet_id ASC 
+                    LIMIT 1
+                ");
+                $stmt->execute(['userId' => $_SESSION['user_id']]);
+                $userOutlet = $stmt->fetch();
+                if ($userOutlet) {
+                    $outletId = $userOutlet['outlet_id'];
+                }
+            }
+            
             $templateId = generateId('pt-');
             
-            $stmt = $pdo->prepare("
-                INSERT INTO package_templates (id, name, package_value, service_value)
-                VALUES (:id, :name, :packageValue, :serviceValue)
-            ");
+            // Try to insert with outlet_id, fallback if column doesn't exist
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO package_templates (id, name, package_value, service_value, outlet_id)
+                    VALUES (:id, :name, :packageValue, :serviceValue, :outletId)
+                ");
+                
+                $result = $stmt->execute([
+                    ':id' => $templateId,
+                    ':name' => $name,
+                    ':packageValue' => $packageValue,
+                    ':serviceValue' => $serviceValue,
+                    ':outletId' => !empty($outletId) ? $outletId : null
+                ]);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'Unknown column') !== false && strpos($e->getMessage(), 'outlet_id') !== false) {
+                    // Column doesn't exist, try without it
+                    $stmt = $pdo->prepare("
+                        INSERT INTO package_templates (id, name, package_value, service_value)
+                        VALUES (:id, :name, :packageValue, :serviceValue)
+                    ");
+                    
+                    $result = $stmt->execute([
+                        ':id' => $templateId,
+                        ':name' => $name,
+                        ':packageValue' => $packageValue,
+                        ':serviceValue' => $serviceValue
+                    ]);
+                } else {
+                    throw $e;
+                }
+            }
             
-            $stmt->execute([
-                'id' => $templateId,
-                'name' => $name,
-                'packageValue' => $packageValue,
-                'serviceValue' => $serviceValue
-            ]);
+            if (!$result) {
+                $errorInfo = $stmt->errorInfo();
+                sendError('Failed to create template: ' . $errorInfo[2], 400);
+            }
             
             sendJSON([
                 'id' => $templateId,
                 'name' => $name,
                 'packageValue' => (float)$packageValue,
-                'serviceValue' => (float)$serviceValue
+                'serviceValue' => (float)$serviceValue,
+                'outletId' => $outletId ?: null
             ], 201);
             
         } elseif ($action === 'delete_template') {
