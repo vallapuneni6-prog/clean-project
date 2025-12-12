@@ -73,9 +73,70 @@ function ensureExpensesTableExists($pdo) {
     }
 }
 
+function columnExists($pdo, $tableName, $columnName) {
+    try {
+        $stmt = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+        $stmt->execute([$tableName, $columnName]);
+        return $stmt->rowCount() > 0;
+    } catch (Exception $e) {
+        error_log("Error checking column existence: " . $e->getMessage());
+        return false;
+    }
+}
+
+function ensureSittingsServiceColumnsExist($pdo) {
+    try {
+        // Add service columns to sittings_packages
+        if (tableExists($pdo, 'sittings_packages')) {
+            if (!columnExists($pdo, 'sittings_packages', 'service_id')) {
+                $pdo->exec("ALTER TABLE sittings_packages ADD COLUMN service_id VARCHAR(50) AFTER service_ids");
+                error_log('Added service_id column to sittings_packages');
+            }
+            if (!columnExists($pdo, 'sittings_packages', 'service_name')) {
+                $pdo->exec("ALTER TABLE sittings_packages ADD COLUMN service_name VARCHAR(100) AFTER service_id");
+                error_log('Added service_name column to sittings_packages');
+            }
+        }
+        
+        // Add service columns to customer_sittings_packages
+        if (tableExists($pdo, 'customer_sittings_packages')) {
+            if (!columnExists($pdo, 'customer_sittings_packages', 'service_id')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN service_id VARCHAR(50) AFTER sittings_package_id");
+                error_log('Added service_id column to customer_sittings_packages');
+            }
+            if (!columnExists($pdo, 'customer_sittings_packages', 'service_name')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN service_name VARCHAR(100) AFTER service_id");
+                error_log('Added service_name column to customer_sittings_packages');
+            }
+            if (!columnExists($pdo, 'customer_sittings_packages', 'service_value')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN service_value DECIMAL(10, 2) AFTER service_name");
+                error_log('Added service_value column to customer_sittings_packages');
+            }
+            if (!columnExists($pdo, 'customer_sittings_packages', 'initial_staff_id')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN initial_staff_id VARCHAR(50) AFTER used_sittings");
+                error_log('Added initial_staff_id column to customer_sittings_packages');
+            }
+            if (!columnExists($pdo, 'customer_sittings_packages', 'initial_staff_name')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN initial_staff_name VARCHAR(100) AFTER initial_staff_id");
+                error_log('Added initial_staff_name column to customer_sittings_packages');
+            }
+            if (!columnExists($pdo, 'customer_sittings_packages', 'initial_sitting_date')) {
+                $pdo->exec("ALTER TABLE customer_sittings_packages ADD COLUMN initial_sitting_date DATE AFTER initial_staff_name");
+                error_log('Added initial_sitting_date column to customer_sittings_packages');
+            }
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        error_log('Error ensuring sittings service columns exist: ' . $e->getMessage());
+        return false;
+    }
+}
+
 function runAllMigrations($pdo) {
     try {
         ensureExpensesTableExists($pdo);
+        ensureSittingsServiceColumnsExist($pdo);
         return true;
     } catch (Exception $e) {
         error_log('Migration failed: ' . $e->getMessage());

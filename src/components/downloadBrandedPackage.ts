@@ -25,6 +25,8 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
         container.style.width = '400px';
         container.style.backgroundColor = 'white';
 
+
+
         const invoiceHTML = `
             <div style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; padding: 10px; width: 100%; box-sizing: border-box;">
                 <div style="display: flex; justify-content: center; margin-bottom: 8px;">

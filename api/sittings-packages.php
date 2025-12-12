@@ -46,15 +46,33 @@ try {
             sendJSON($templates);
             
         } elseif ($type === 'customer_packages') {
-            // Get all customer sittings packages
+            // Get customer sittings packages (optionally filtered by outlet)
             try {
-                $stmt = $pdo->query("
-                    SELECT csp.*, sp.paid_sittings, sp.free_sittings 
-                    FROM customer_sittings_packages csp
-                    LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id
-                    ORDER BY csp.assigned_date DESC
-                ");
-                $packages = $stmt->fetchAll();
+                $outletId = $_GET['outletId'] ?? null;
+                
+                if ($outletId) {
+                    // Filter by outlet
+                    $stmt = $pdo->prepare("
+                        SELECT csp.*, sp.paid_sittings, sp.free_sittings, sp.service_id as template_service_id, sp.service_name as template_service_name
+                        FROM customer_sittings_packages csp
+                        LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id
+                        WHERE csp.outlet_id = :outletId
+                        ORDER BY csp.assigned_date DESC
+                    ");
+                    $stmt->execute([':outletId' => $outletId]);
+                    $packages = $stmt->fetchAll();
+                    error_log("Loaded customer sittings packages for outlet: $outletId, count: " . count($packages));
+                } else {
+                    // No outlet filter, return all packages
+                    $stmt = $pdo->query("
+                        SELECT csp.*, sp.paid_sittings, sp.free_sittings, sp.service_id as template_service_id, sp.service_name as template_service_name
+                        FROM customer_sittings_packages csp
+                        LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id
+                        ORDER BY csp.assigned_date DESC
+                    ");
+                    $packages = $stmt->fetchAll();
+                    error_log("Loaded all customer sittings packages, count: " . count($packages));
+                }
             } catch (PDOException $e) {
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
                     // Tables don't exist yet, return empty array
@@ -62,18 +80,24 @@ try {
                     sendJSON([]);
                     exit;
                 }
+                error_log("Error loading customer sittings packages: " . $e->getMessage());
                 throw $e;
             }
             
             $packages = array_map(function($p) {
+                // Use service_name and service_value from customer package if available
+                // Otherwise try to use from template
+                $serviceName = isset($p['service_name']) && !empty($p['service_name']) ? $p['service_name'] : (isset($p['template_service_name']) ? $p['template_service_name'] : null);
+                $serviceValue = isset($p['service_value']) && !empty($p['service_value']) ? floatval($p['service_value']) : null;
+                
                 return [
                     'id' => $p['id'],
                     'customerName' => $p['customer_name'],
                     'customerMobile' => $p['customer_mobile'],
                     'sittingsPackageId' => $p['sittings_package_id'],
-                    'serviceId' => isset($p['service_id']) ? $p['service_id'] : null,
-                    'serviceName' => isset($p['service_name']) ? $p['service_name'] : null,
-                    'serviceValue' => isset($p['service_value']) ? floatval($p['service_value']) : null,
+                    'serviceId' => isset($p['service_id']) && !empty($p['service_id']) ? $p['service_id'] : (isset($p['template_service_id']) ? $p['template_service_id'] : null),
+                    'serviceName' => $serviceName,
+                    'serviceValue' => $serviceValue,
                     'outletId' => $p['outlet_id'],
                     'assignedDate' => $p['assigned_date'],
                     'totalSittings' => (int)$p['total_sittings'],
@@ -264,6 +288,39 @@ try {
             $usedSittings = $redeemInitialSitting ? 1 : 0;
             $packageId = generateId('csp-');
             
+            // If initial sitting is being redeemed, record staff commission
+            if ($redeemInitialSitting && $initialStaffId && $initialStaffName && $serviceName) {
+                error_log("Recording staff commission for initial sitting: {$initialStaffName}, value: {$serviceValue}");
+                
+                // Create a service record for staff commission tracking (60% of service value)
+                $staffSalesId = generateId('ss-');
+                try {
+                    $salesStmt = $pdo->prepare("
+                        INSERT INTO service_records (id, staff_name, staff_id, service_name, service_value, outlet_id, created_date, is_initial_sitting)
+                        VALUES (:id, :staffName, :staffId, :serviceName, :serviceValue, :outletId, :date, 1)
+                    ");
+                    
+                    $salesStmt->execute([
+                        ':id' => $staffSalesId,
+                        ':staffName' => $initialStaffName,
+                        ':staffId' => $initialStaffId,
+                        ':serviceName' => $serviceName,
+                        ':serviceValue' => $serviceValue,
+                        ':outletId' => $outletId,
+                        ':date' => date('Y-m-d H:i:s')
+                    ]);
+                    
+                    error_log("Staff commission recorded for {$initialStaffName}: ₹" . ($serviceValue * 0.6));
+                } catch (PDOException $e) {
+                    // If service_records table doesn't exist, log but continue
+                    if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                        error_log("Note: service_records table doesn't exist yet. Staff commission not recorded.");
+                    } else {
+                        error_log("Error recording staff commission: " . $e->getMessage());
+                    }
+                }
+            }
+            
             // Check if initial sitting columns exist
             try {
                 $columnCheck = $pdo->query("SHOW COLUMNS FROM customer_sittings_packages LIKE 'initial_staff_id'");
@@ -445,19 +502,58 @@ try {
             }
             
             // Update the package with new used sittings count
-            $stmt = $pdo->prepare("
-                UPDATE customer_sittings_packages 
-                SET used_sittings = :usedSittings
-                WHERE id = :id
-            ");
-            
-            $stmt->execute([
-                ':id' => $packageId,
-                ':usedSittings' => $newUsed
-            ]);
-            
-            // Record the sitting redemption with invoice data
-            $redemptionId = generateId('sr-');
+             $stmt = $pdo->prepare("
+                 UPDATE customer_sittings_packages 
+                 SET used_sittings = :usedSittings
+                 WHERE id = :id
+             ");
+             
+             $stmt->execute([
+                 ':id' => $packageId,
+                 ':usedSittings' => $newUsed
+             ]);
+             
+             // Record staff commission for redemption (60% of service value)
+             if ($staffName && $staffId) {
+                 $serviceValue = isset($package['service_value']) ? (float)$package['service_value'] : 0;
+                 $serviceName = isset($package['service_name']) ? $package['service_name'] : 'Service';
+                 $outletId = isset($package['outlet_id']) ? $package['outlet_id'] : '';
+                 
+                 if ($serviceValue > 0) {
+                     error_log("Recording staff commission for redemption: {$staffName}, value: {$serviceValue}");
+                     
+                     // Create a service record for staff commission tracking (60% of service value)
+                     $staffSalesId = generateId('ss-');
+                     try {
+                         $salesStmt = $pdo->prepare("
+                             INSERT INTO service_records (id, staff_name, staff_id, service_name, service_value, outlet_id, created_date, is_sittings_redemption)
+                             VALUES (:id, :staffName, :staffId, :serviceName, :serviceValue, :outletId, :date, 1)
+                         ");
+                         
+                         $salesStmt->execute([
+                             ':id' => $staffSalesId,
+                             ':staffName' => $staffName,
+                             ':staffId' => $staffId,
+                             ':serviceName' => $serviceName,
+                             ':serviceValue' => $serviceValue,
+                             ':outletId' => $outletId,
+                             ':date' => date('Y-m-d H:i:s')
+                         ]);
+                         
+                         error_log("Staff commission recorded for {$staffName}: ₹" . ($serviceValue * 0.6));
+                     } catch (PDOException $e) {
+                         // If service_records table doesn't exist or columns don't exist, log but continue
+                         if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false || strpos($e->getMessage(), 'Unknown column') !== false) {
+                             error_log("Note: service_records table or columns don't exist yet. Staff commission not recorded.");
+                         } else {
+                             error_log("Error recording staff commission: " . $e->getMessage());
+                         }
+                     }
+                 }
+             }
+             
+             // Record the sitting redemption with invoice data
+             $redemptionId = generateId('sr-');
             
             // Get additional package details for invoice storage
             $stmt = $pdo->prepare("SELECT csp.*, sp.name as package_name, sp.paid_sittings, sp.free_sittings, o.id as outlet_id FROM customer_sittings_packages csp LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id LEFT JOIN outlets o ON csp.outlet_id = o.id WHERE csp.id = :id");
