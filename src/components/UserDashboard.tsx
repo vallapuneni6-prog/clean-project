@@ -69,6 +69,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         gstPercentage: 5
     });
 
+    // State for selected sittings in the new redemption approach
+    const [selectedSittings, setSelectedSittings] = useState<Record<string, boolean>>({});
+    const [showSittingSelection, setShowSittingSelection] = useState(false);
+
     // Search and filter state for Redeem Services
     const [redeemSearchQuery, setRedeemSearchQuery] = useState('');
     const [filteredCustomerPackages, setFilteredCustomerPackages] = useState<CustomerPackage[]>([]);
@@ -827,56 +831,111 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             showMessage('Error fetching redemption history', 'error');
         }
     };
+
+    // Handle sitting selection for redemption
+    const handleSittingSelection = (pkg: CustomerSittingsPackage, sittingIndex: number) => {
+        // Don't allow selection of the first sitting (index 0) as it's the initial sitting
+        if (sittingIndex === 0) return;
+        
+        const sittingKey = `${pkg.id}-${sittingIndex}`;
+        setSelectedSittings(prev => ({
+            ...prev,
+            [sittingKey]: !prev[sittingKey]
+        }));
+        
+        // If this sitting is now selected, show the redemption form
+        if (!selectedSittings[sittingKey]) {
+            setShowSittingSelection(true);
+            setRedeemSittingsForm(prev => ({
+                ...prev,
+                customerSittingsPackageId: pkg.id
+            }));
+        }
+    };
     // Generate invoice for a past sitting redemption
     const generateOldSittingInvoice = async (record: any) => {
         try {
             console.log('Generating old sitting invoice for record:', record);
             setLoading(true);
 
-            // Find the customer package for this record
-            const pkg = customerSittingsPackages.find(p => p.id === record.customerPackageId);
-            console.log('Found customer package:', pkg);
-            if (!pkg) {
-                showMessage('Could not find package information', 'error');
-                return;
+            // If this record has stored invoice data, use it directly
+            let pkg, template, outlet, redemptionPackage;
+            
+            if (record.invoiceData) {
+                // Parse the stored invoice data
+                const invoiceData = typeof record.invoiceData === 'string' 
+                    ? JSON.parse(record.invoiceData) 
+                    : record.invoiceData;
+                
+                // Use the stored data to recreate the package object
+                redemptionPackage = {
+                    id: record.customerPackageId,
+                    customerName: invoiceData.customerName || 'N/A',
+                    customerMobile: invoiceData.customerMobile || 'N/A',
+                    sittingsPackageId: '', // Not needed for invoice generation
+                    serviceId: '', // Not needed for invoice generation
+                    serviceName: invoiceData.serviceName || 'N/A',
+                    serviceValue: invoiceData.serviceValue || 0,
+                    outletId: invoiceData.outletId || '',
+                    assignedDate: new Date(invoiceData.assignedDate || new Date()),
+                    totalSittings: invoiceData.totalSittings || 0,
+                    usedSittings: invoiceData.usedSittings || 0,
+                    remainingSittings: invoiceData.remainingSittings || 0,
+                    initialStaffId: '', // Not needed for invoice generation
+                    initialStaffName: invoiceData.initialStaffName || 'N/A',
+                    initialSittingDate: new Date(invoiceData.assignedDate || new Date())
+                };
+                
+                // Find the template and outlet from stored data
+                template = sittingsTemplates.find(t => t.name === invoiceData.packageName) || sittingsTemplates[0];
+                outlet = outlets.find(o => o.id === invoiceData.outletId) || outlets[0];
+            } else {
+                // Fall back to the old method for records without stored invoice data
+                
+                // Find the customer package for this record
+                pkg = customerSittingsPackages.find(p => p.id === record.customerPackageId);
+                console.log('Found customer package:', pkg);
+                if (!pkg) {
+                    showMessage('Could not find package information', 'error');
+                    return;
+                }
+
+                // Find the template and outlet
+                template = sittingsTemplates.find(t => t.id === pkg.sittingsPackageId);
+                // Use userOutletId as primary, but fallback to package outlet or any available outlet if needed
+                outlet = outlets.find(o => o.id === userOutletId) || 
+                              outlets.find(o => o.id === pkg.outletId) || 
+                              outlets[0];
+
+                console.log('Template:', template);
+                console.log('Outlet:', outlet);
+
+                if (!template) {
+                    showMessage('Could not find package template', 'error');
+                    return;
+                }
+
+                if (!outlet) {
+                    showMessage('Could not find outlet information', 'error');
+                    return;
+                }
+
+                // Create a temporary package object with the redemption data
+                redemptionPackage = {
+                    ...pkg,
+                    usedSittings: record.usedSittings,
+                    remainingSittings: pkg.totalSittings - record.usedSittings,
+                    serviceName: record.serviceName || 'N/A', // Use service name from record (API provides it correctly)
+                    // For initial sitting, use the staff name from the record
+                    ...(record.isInitial && { initialStaffName: record.staffName })
+                };
             }
-
-            // Find the template and outlet
-            const template = sittingsTemplates.find(t => t.id === pkg.sittingsPackageId);
-            // Use userOutletId as primary, but fallback to package outlet or any available outlet if needed
-            const outlet = outlets.find(o => o.id === userOutletId) || 
-                          outlets.find(o => o.id === pkg.outletId) || 
-                          outlets[0];
-
-            console.log('Template:', template);
-            console.log('Outlet:', outlet);
-
-            if (!template) {
-                showMessage('Could not find package template', 'error');
-                return;
-            }
-
-            if (!outlet) {
-                showMessage('Could not find outlet information', 'error');
-                return;
-            }
-
-            // Create a temporary package object with the redemption data
-            const redemptionPackage = {
-                ...pkg,
-                usedSittings: record.usedSittings,
-                remainingSittings: pkg.totalSittings - record.usedSittings,
-                serviceName: record.serviceName || pkg.serviceName || 'N/A', // Ensure service name is available
-                // For initial sitting, use the staff name from the record
-                ...(record.isInitial && { initialStaffName: record.staffName })
-            };
             console.log('Redemption package data:', redemptionPackage);
             // Generate invoice image for this specific redemption
             const invoiceImage = await generateBrandedSittingsInvoiceImage(
                 redemptionPackage,
                 template,
-                outlet,
-                record.staffName  // Pass staff name to ensure it displays in invoice
+                outlet
             );
 
             // Show preview and enable WhatsApp sharing
@@ -916,7 +975,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
 
         try {
-            // Sitting packages: 1 sitting used per redemption, no pricing
+            // Get the selected package to include service details
+            const selectedPackage = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
+            
+            // Sitting packages: 1 sitting used per redemption, include service details
             const response = await fetch('/api/sittings-packages', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -926,7 +988,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     redemptionDate: redeemSittingsForm.redemptionDate,
                     staffId: redeemSittingsForm.staffId,
                     staffName: redeemSittingsForm.staffName,
-                    sittingsUsed: 1
+                    sittingsUsed: 1,
+                    serviceName: selectedPackage?.serviceName || '',
+                    serviceValue: selectedPackage?.serviceValue || 0
                 })
             });
 
@@ -975,12 +1039,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                             staffName: redeemSittingsForm.staffName
                         });
 
-                        // Generate invoice image for redemption with staff name
+                        // Generate invoice image for redemption
                         const invoiceImage = await generateBrandedSittingsInvoiceImage(
                             customerPkg,
                             template,
-                            outlet,
-                            redeemSittingsForm.staffName  // Pass staff name to ensure it displays in invoice
+                            outlet
                         );
 
                         // Show preview modal
@@ -1004,6 +1067,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     showMessage('Sitting redeemed successfully!', 'success');
                 }
 
+                // Reset form and hide sitting selection
                 setRedeemSittingsForm({
                     customerSittingsPackageId: '',
                     staffId: '',
@@ -1011,6 +1075,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     redemptionDate: new Date().toISOString().split('T')[0],
                     gstPercentage: 5
                 });
+                setShowSittingSelection(false);
+                setSelectedSittings({});
 
                 setTimeout(() => {
                     loadData();
@@ -2173,15 +2239,57 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                     value={assignSittingsForm.sittingsPackageId}
                                                     onChange={(e) => {
                                                         const template = sittingsTemplates.find(t => t.id === e.target.value);
-                                                        if (template && template.serviceName) {
-                                                            const matchingService = services.find(s => s.name.toLowerCase() === template.serviceName?.toLowerCase());
+                                                        if (template) {
+                                                            // Auto-populate service details when package is selected
+                                                            let serviceId = '';
+                                                            let serviceName = '';
+                                                            let serviceValue = 0;
+                                                                                                        
+                                                            // First try to get service from template
+                                                            if (template.serviceId && template.serviceName) {
+                                                                serviceId = template.serviceId;
+                                                                serviceName = template.serviceName;
+                                                                                                            
+                                                                // Try to find the service in our services list to get the price
+                                                                const matchingService = services.find(s => s.id === template.serviceId);
+                                                                if (matchingService) {
+                                                                    serviceValue = matchingService.price;
+                                                                }
+                                                            } 
+                                                            // If template doesn't have service info, try to match by name
+                                                            else if (template.serviceName) {
+                                                                serviceName = template.serviceName;
+                                                                const matchingService = services.find(s => 
+                                                                    s.name.toLowerCase() === template.serviceName?.toLowerCase()
+                                                                );
+                                                                if (matchingService) {
+                                                                    serviceId = matchingService.id;
+                                                                    serviceValue = matchingService.price;
+                                                                }
+                                                            }
+                                                                                                        
                                                             setAssignSittingsForm(prev => ({
                                                                 ...prev,
                                                                 sittingsPackageId: e.target.value,
-                                                                serviceId: template.serviceId || matchingService?.id || '',
-                                                                serviceName: template.serviceName || '',
-                                                                serviceValue: matchingService?.price || 0
+                                                                serviceId: serviceId,
+                                                                serviceName: serviceName,
+                                                                serviceValue: serviceValue
                                                             }));
+                                                                                                                    
+                                                            // Also populate the initial sitting service item if it's empty
+                                                            if (assignSittingsServiceItems.length === 1 && 
+                                                                !assignSittingsServiceItems[0].serviceName && 
+                                                                !assignSittingsServiceItems[0].staffName) {
+                                                                setAssignSittingsServiceItems([{
+                                                                    serviceId: serviceId,
+                                                                    serviceName: serviceName,
+                                                                    quantity: 1,
+                                                                    price: serviceValue,
+                                                                    total: serviceValue,
+                                                                    staffId: '',
+                                                                    staffName: ''
+                                                                }]);
+                                                            }
                                                         } else {
                                                             setAssignSittingsForm(prev => ({
                                                                 ...prev,
@@ -2514,41 +2622,57 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                 <tr className="bg-gray-100 border-b-2 border-gray-300">
                                                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
                                                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
-                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total Sittings</th>
-                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Used Sittings</th>
-                                                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Remaining Sittings</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Service</th>
+                                                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Sittings</th>
                                                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
-                                                                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                {filteredCustomerSittingsPackages.map((pkg) => (
-                                                                    <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                                                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
-                                                                        <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
-                                                                        <td className="px-4 py-4 text-sm text-right font-semibold text-gray-900">{pkg.totalSittings}</td>
-                                                                        <td className="px-4 py-4 text-sm text-right font-semibold text-gray-900">{pkg.usedSittings}</td>
-                                                                        <td className="px-4 py-4 text-sm text-right">
-                                                                            <span className="font-semibold text-green-600">{pkg.remainingSittings}</span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4 text-sm text-gray-600">
-                                                                            {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
-                                                                        </td>
-                                                                        <td className="px-4 py-4 text-sm text-center space-x-2">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    setRedeemSittingsForm(prev => ({ ...prev, customerSittingsPackageId: pkg.id }));
-                                                                                    setRedeemSearchQuerySittings('');
-                                                                                    document.getElementById('redeem-sittings-form')?.scrollIntoView({ behavior: 'smooth' });
-                                                                                }}
-                                                                                className="px-3 py-1 bg-brand-primary text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
-                                                                            >
-                                                                                Redeem
-                                                                            </button>
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
+                                                                {filteredCustomerSittingsPackages.map((pkg) => {
+                                                                    const template = sittingsTemplates.find(t => t.id === pkg.sittingsPackageId);
+                                                                    return (
+                                                                        <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                                            <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-900">{template?.name || 'N/A'}</td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-900">{pkg.serviceName || 'N/A'}</td>
+                                                                            <td className="px-4 py-4 text-sm">
+                                                                                <div className="flex flex-wrap gap-2">
+                                                                                    {Array.from({ length: pkg.totalSittings }, (_, i) => {
+                                                                                        const sittingNumber = i + 1;
+                                                                                        const sittingKey = `${pkg.id}-${sittingNumber}`;
+                                                                                        const isUsed = sittingNumber <= pkg.usedSittings;
+                                                                                        const isSelected = selectedSittings[sittingKey];
+                                                                                        const isDisabled = sittingNumber === 1; // First sitting is initial sitting
+                                                                                        
+                                                                                        return (
+                                                                                            <button
+                                                                                                key={sittingNumber}
+                                                                                                type="button"
+                                                                                                onClick={() => handleSittingSelection(pkg, i)}
+                                                                                                disabled={isUsed || isDisabled}
+                                                                                                className={`px-2 py-1 rounded text-xs font-medium ${isUsed 
+                                                                                                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                                                                                                    : isDisabled 
+                                                                                                        ? 'bg-blue-200 text-blue-800 cursor-not-allowed' 
+                                                                                                        : isSelected 
+                                                                                                            ? 'bg-green-500 text-white' 
+                                                                                                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                                                                                            >
+                                                                                                {sittingNumber}{sittingNumber === 1 ? 'st*' : sittingNumber === 2 ? 'nd' : sittingNumber === 3 ? 'rd' : 'th'}
+                                                                                            </button>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-500 mt-1">*Initial sitting</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-4 text-sm text-gray-600">
+                                                                                {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
                                                             </tbody>
                                                         </table>
                                                     </div>
@@ -2557,9 +2681,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                         </div>
 
                                         {/* Redeem Form */}
-                                        {redeemSittingsForm.customerSittingsPackageId && (
+                                        {showSittingSelection && redeemSittingsForm.customerSittingsPackageId && (
                                             <div id="redeem-sittings-form" className="bg-white rounded-lg border border-gray-200 p-8">
-                                                <h3 className="text-2xl font-bold mb-6 text-gray-900">Redeem from Sittings Package</h3>
+                                                <h3 className="text-2xl font-bold mb-6 text-gray-900">Redeem Sitting</h3>
 
                                                 <form onSubmit={handleRedeemSittings} className="space-y-6">
                                                     {/* Selected Package Info */}
@@ -2576,7 +2700,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                 </div>
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => setRedeemSittingsForm(prev => ({ ...prev, customerSittingsPackageId: '' }))}
+                                                                    onClick={() => {
+                                                                        setShowSittingSelection(false);
+                                                                        setRedeemSittingsForm(prev => ({ ...prev, customerSittingsPackageId: '' }));
+                                                                    }}
                                                                     className="text-brand-primary hover:underline text-sm font-medium"
                                                                 >
                                                                     Change
@@ -2589,28 +2716,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                     <p className="font-semibold">{sittingsTemplates.find(t => t.id === customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.sittingsPackageId)?.name || 'N/A'}</p>
                                                                 </div>
                                                                 <div className="bg-white p-3 rounded border">
-                                                                    <p className="text-xs text-gray-500">Total Sittings</p>
-                                                                    <p className="font-semibold">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.totalSittings}</p>
+                                                                    <p className="text-xs text-gray-500">Service</p>
+                                                                    <p className="font-semibold">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.serviceName || 'N/A'}</p>
                                                                 </div>
                                                                 <div className="bg-white p-3 rounded border">
                                                                     <p className="text-xs text-gray-500">Remaining Sittings</p>
                                                                     <p className="font-semibold text-green-600">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings}</p>
                                                                 </div>
-                                                            </div>
-                                                            
-                                                            <div className="mt-4 pt-4 border-t border-gray-300">
-                                                                <p className="text-xs text-gray-500">Service</p>
-                                                                <p className="font-semibold">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.serviceName || 'N/A'}</p>
-                                                            </div>
-                                                            
-                                                            <div className="mt-4">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => fetchSittingRedemptionHistory(redeemSittingsForm.customerSittingsPackageId)}
-                                                                    className="text-sm text-brand-primary hover:underline font-medium"
-                                                                >
-                                                                    View Redemption History
-                                                                </button>
                                                             </div>
                                                         </div>
                                                     )}
@@ -2625,6 +2737,42 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
                                                         />
                                                     </div>
+
+                                                    {/* Service Details (Auto-populated from Package) */}
+                                                    {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId) && (() => {
+                                                        const selectedPackage = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
+                                                        return (
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                                                <div>
+                                                                    <label className="block text-sm font-medium text-gray-700 mb-2">Service Name</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={selectedPackage?.serviceName || ''}
+                                                                        readOnly
+                                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-sm font-medium text-gray-700 mb-2">Service Value (₹)</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={selectedPackage?.serviceValue?.toFixed(2) || '0.00'}
+                                                                        readOnly
+                                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-sm font-medium text-gray-700 mb-2">Remaining Sittings</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={selectedPackage?.remainingSittings || 0}
+                                                                        readOnly
+                                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-900 font-semibold"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
 
                                                     {/* Staff Selection */}
                                                     <div>
@@ -2653,37 +2801,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                 <option disabled>No staff available</option>
                                                             )}
                                                         </select>
-                                                    </div>
-
-                                                    {/* GST Percentage */}
-                                                    <div>
-                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                            GST Percentage
-                                                        </label>
-                                                        <select
-                                                            value={redeemSittingsForm.gstPercentage}
-                                                            onChange={(e) => setRedeemSittingsForm(prev => ({ ...prev, gstPercentage: parseInt(e.target.value) }))}
-                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
-                                                        >
-                                                            <option value={0}>0% (No GST)</option>
-                                                            <option value={5}>5% GST</option>
-                                                            <option value={12}>12% GST</option>
-                                                            <option value={18}>18% GST</option>
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Sitting Information */}
-                                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2 mt-4">
-                                                        <div className="flex justify-between">
-                                                            <span className="text-gray-600">Sitting Redeemed:</span>
-                                                            <span className="font-semibold text-gray-900">1 sitting</span>
-                                                        </div>
-                                                        <div className="flex justify-between">
-                                                            <span className="text-gray-600">Remaining Sittings:</span>
-                                                            <span className="font-semibold text-green-600">
-                                                                {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings - 1}
-                                                            </span>
-                                                        </div>
                                                     </div>
 
                                                     {/* Submit Button */}

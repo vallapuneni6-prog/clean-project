@@ -116,8 +116,7 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
 export const generateBrandedSittingsInvoiceImage = async (
     customerPackage: CustomerSittingsPackage,
     template: SittingsPackage,
-    outlet: Outlet,
-    staffName?: string
+    outlet: Outlet
 ): Promise<string> => {
     try {
         // Load logo as data URL
@@ -198,10 +197,6 @@ export const generateBrandedSittingsInvoiceImage = async (
                         <td style="text-align: left; padding: 4px 0;">Service:</td>
                         <td style="text-align: right; padding: 4px 0;">${customerPackage.serviceName || 'N/A'}</td>
                     </tr>
-                    ${(customerPackage.initialStaffName || customerPackage.usedSittings > 0) ? `<tr>
-                        <td style="text-align: left; padding: 4px 0;">Staff:</td>
-                        <td style="text-align: right; padding: 4px 0;">${customerPackage.initialStaffName || staffName || 'N/A'}</td>
-                    </tr>` : ''}
                     ${customerPackage.usedSittings > 0 ? `<tr>
                         <td style="text-align: left; padding: 4px 0;">Sitting #${sittingNumber}:</td>
                         <td style="text-align: right; padding: 4px 0;">Redeemed</td>
