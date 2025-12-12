@@ -142,8 +142,8 @@ export const generateBrandedSittingsInvoiceImage = async (
         container.style.width = '400px';
         container.style.backgroundColor = 'white';
 
-        // Calculate the sitting number (total - remaining + 1 for current)
-        const sittingNumber = customerPackage.totalSittings - customerPackage.remainingSittings;
+        // Use the actual used sittings count
+        const sittingNumber = customerPackage.usedSittings;
 
         const invoiceHTML = `
             <div style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; padding: 10px; width: 100%; box-sizing: border-box;">
@@ -198,15 +198,14 @@ export const generateBrandedSittingsInvoiceImage = async (
                         <td style="text-align: left; padding: 4px 0;">Service:</td>
                         <td style="text-align: right; padding: 4px 0;">${customerPackage.serviceName || 'N/A'}</td>
                     </tr>
-                    ${staffName ? `<tr>
+                    ${(customerPackage.initialStaffName || customerPackage.usedSittings > 0) ? `<tr>
                         <td style="text-align: left; padding: 4px 0;">Staff:</td>
-                        <td style="text-align: right; padding: 4px 0;">${staffName}</td>
+                        <td style="text-align: right; padding: 4px 0;">${customerPackage.initialStaffName || staffName || 'N/A'}</td>
                     </tr>` : ''}
                     ${customerPackage.usedSittings > 0 ? `<tr>
                         <td style="text-align: left; padding: 4px 0;">Sitting #${sittingNumber}:</td>
                         <td style="text-align: right; padding: 4px 0;">Redeemed</td>
-                    </tr>` : ''}
-                    <tr>
+                    </tr>` : ''}                    <tr>
                         <td style="text-align: left; padding: 4px 0;">Total Sittings:</td>
                         <td style="text-align: right; padding: 4px 0;">${customerPackage.totalSittings}</td>
                     </tr>

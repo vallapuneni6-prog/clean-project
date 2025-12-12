@@ -65,7 +65,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         customerSittingsPackageId: '',
         staffId: '',
         staffName: '',
-        redemptionDate: new Date().toISOString().split('T')[0]
+        redemptionDate: new Date().toISOString().split('T')[0],
+        gstPercentage: 5
     });
 
     // Search and filter state for Redeem Services
@@ -103,6 +104,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     const [showRedeemForm, setShowRedeemForm] = useState(false);
     const [showAssignSittingsForm, setShowAssignSittingsForm] = useState(false);
     const [showRedeemSittingsForm, setShowRedeemSittingsForm] = useState(false);
+    const [sittingRedemptions, setSittingRedemptions] = useState<any[]>([]);
+    const [showRedemptionHistory, setShowRedemptionHistory] = useState(false);
 
     // Invoice preview and history states
     const [invoicePreview, setInvoicePreview] = useState<string | null>(null);
@@ -194,6 +197,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
     }, [redeemSearchQuerySittings, customerSittingsPackages]);
 
+    useEffect(() => {
+        console.log('Sittings templates updated:', sittingsTemplates);
+    }, [sittingsTemplates]);
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -224,7 +231,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             }
 
             if (sittingsTemplatesRes.ok) {
-                setSittingsTemplates(await sittingsTemplatesRes.json());
+                const sittingsData = await sittingsTemplatesRes.json();
+                console.log('Sittings templates loaded:', sittingsData);
+                setSittingsTemplates(sittingsData);
+            } else {
+                console.error('Sittings templates API error:', sittingsTemplatesRes.status, sittingsTemplatesRes.statusText);
             }
 
             if (customerSittingsRes.ok) {
@@ -598,6 +609,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             return;
         }
 
+        // Validate initial sitting service items if any are being filled
+        const initialItem = assignSittingsServiceItems[0];
+        const hasPartialInitialSitting = (initialItem?.staffName || initialItem?.serviceName);
+        if (hasPartialInitialSitting && !(initialItem?.staffName && initialItem?.serviceName)) {
+            showMessage('If adding initial sitting, please fill in both Staff Name and Service Name', 'warning');
+            return;
+        }
+
         try {
             const serviceValue = assignSittingsForm.serviceValue;
             const selectedPackage = sittingsTemplates.find(p => p.id === assignSittingsForm.sittingsPackageId);
@@ -609,24 +628,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             // Check if initial sitting is being redeemed (service item added)
             console.log('=== INITIAL SITTING DEBUG ===');
             console.log('All service items:', assignSittingsServiceItems);
-            
+
             const initialItem = assignSittingsServiceItems[0];
             console.log('Initial item:', initialItem);
             console.log('Staff check:', {
                 staffId: initialItem?.staffId,
                 staffName: initialItem?.staffName,
+                serviceName: initialItem?.serviceName,
                 staffIdType: typeof initialItem?.staffId,
                 staffNameType: typeof initialItem?.staffName,
-                staffIdEmpty: !initialItem?.staffId,
-                staffNameEmpty: !initialItem?.staffName
+                staffIdTruthy: !!initialItem?.staffId,
+                staffNameTruthy: !!initialItem?.staffName,
+                serviceNameTruthy: !!initialItem?.serviceName
             });
-            
-            const hasInitialSitting = initialItem && 
-                                     initialItem.staffId && 
-                                     initialItem.staffName && 
-                                     initialItem.serviceName;
+
+            const hasInitialSitting = initialItem &&
+                !!initialItem.staffId &&
+                !!initialItem.staffName &&
+                !!initialItem.serviceName;
 
             console.log('Has Initial Sitting?', hasInitialSitting);
+            console.log('Initial sitting validation:', {
+                hasItem: !!initialItem,
+                hasStaffId: !!initialItem?.staffId,
+                hasStaffName: !!initialItem?.staffName,
+                hasServiceName: !!initialItem?.serviceName,
+                staffId: initialItem?.staffId,
+                staffName: initialItem?.staffName,
+                serviceName: initialItem?.serviceName
+            });
 
             const paidSittings = selectedPackage.paidSittings;
             const subtotal = serviceValue * paidSittings;
@@ -635,39 +665,49 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             console.log('Sending assign sittings request with:', {
                 hasInitialSitting: hasInitialSitting,
                 initialStaffId: initialItem?.staffId,
-                initialStaffName: initialItem?.staffName
+                initialStaffName: initialItem?.staffName,
+                initialServiceName: initialItem?.serviceName
             });
+
+            const requestBody = {
+                action: 'assign',
+                customerName: assignSittingsForm.customerName,
+                customerMobile: assignSittingsForm.customerMobile,
+                sittingsPackageId: assignSittingsForm.sittingsPackageId,
+                serviceId: assignSittingsForm.serviceId,
+                serviceName: assignSittingsForm.serviceName,
+                serviceValue: serviceValue,
+                assignedDate: assignSittingsForm.assignedDate,
+                redeemInitialSitting: hasInitialSitting,
+                initialStaffId: assignSittingsServiceItems[0]?.staffId || null,
+                initialStaffName: assignSittingsServiceItems[0]?.staffName || null,
+                initialSittingDate: hasInitialSitting ? assignSittingsForm.initialSittingDate : null,
+                outletId: userOutletId,
+                gstPercentage: assignSittingsForm.gstPercentage,
+                gstAmount: gstAmount,
+                totalAmount: subtotal + gstAmount,
+                staffTargetPercentage: 60
+            };
+
+            console.log('Request body to be sent:', requestBody);
+            console.log('Stringified body:', JSON.stringify(requestBody));
 
             const response = await fetch('/api/sittings-packages', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'assign',
-                    customerName: assignSittingsForm.customerName,
-                    customerMobile: assignSittingsForm.customerMobile,
-                    sittingsPackageId: assignSittingsForm.sittingsPackageId,
-                    serviceId: assignSittingsForm.serviceId,
-                    serviceName: assignSittingsForm.serviceName,
-                    serviceValue: serviceValue,
-                    assignedDate: assignSittingsForm.assignedDate,
-                    redeemInitialSitting: hasInitialSitting,
-                    initialStaffId: assignSittingsServiceItems[0]?.staffId || null,
-                    initialStaffName: assignSittingsServiceItems[0]?.staffName || null,
-                    initialSittingDate: hasInitialSitting ? assignSittingsForm.initialSittingDate : null,
-                    outletId: userOutletId,
-                    gstPercentage: assignSittingsForm.gstPercentage,
-                    gstAmount: gstAmount,
-                    totalAmount: subtotal + gstAmount,
-                    staffTargetPercentage: 60
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.ok) {
                 const result = await response.json();
-                const newPackage = result.newPackage as CustomerSittingsPackage;
+                // Convert assignedDate to Date object to match the interface
+                const newPackage = {
+                    ...result.newPackage,
+                    assignedDate: new Date(result.newPackage.assignedDate)
+                } as CustomerSittingsPackage;
 
                 console.log('✓ Assignment response received:', {
-                    redeemInitialSitting: assignSittingsForm.redeemInitialSitting,
+                    sentRedeemInitialSitting: hasInitialSitting,
                     apiReturnedUsedSittings: newPackage.usedSittings,
                     apiReturnedRemainingsSittings: newPackage.remainingSittings,
                     totalSittings: newPackage.totalSittings,
@@ -679,7 +719,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
                 // Find the template and outlet for invoice generation
                 const template = sittingsTemplates.find(t => t.id === assignSittingsForm.sittingsPackageId);
-                const outlet = outlets.find(o => o.id === userOutletId);
+                // Use userOutletId as primary, but fallback to any available outlet if needed
+                const outlet = outlets.find(o => o.id === userOutletId) || outlets[0];
+
+                console.log('Template lookup:', { 
+                    templateId: assignSittingsForm.sittingsPackageId, 
+                    foundTemplate: !!template, 
+                    template, 
+                    availableTemplates: sittingsTemplates.map(t => ({id: t.id, name: t.name})) 
+                });
+                console.log('Outlet lookup:', { 
+                    outletId: userOutletId, 
+                    foundOutlet: !!outlet, 
+                    outlet, 
+                    availableOutlets: outlets.map(o => ({id: o.id, name: o.name})) 
+                });
 
                 if (template && outlet && newPackage) {
                     try {
@@ -688,7 +742,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                             totalSittings: newPackage.totalSittings,
                             usedSittings: newPackage.usedSittings,
                             remainingSittings: newPackage.remainingSittings,
-                            redeemInitialSitting: assignSittingsForm.redeemInitialSitting,
+                            sentRedeemInitialSitting: hasInitialSitting,
                             invoiceWillShowUsed: newPackage.usedSittings > 0
                         });
 
@@ -705,9 +759,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                         setShowWhatsAppPreview(true);
                     } catch (error) {
                         console.error('Error generating invoice:', error);
-                        showMessage('Sittings package assigned! (Could not generate invoice)', 'success');
+                        console.error('Invoice generation params:', { newPackage, template, outlet });
+                        showMessage('Sittings package assigned! (Could not generate invoice: ' + (error.message || 'Unknown error') + ')', 'success');
                     }
                 } else {
+                    console.error('Missing data for invoice generation:', { 
+                        hasTemplate: !!template, 
+                        hasOutlet: !!outlet, 
+                        hasNewPackage: !!newPackage,
+                        templateId: assignSittingsForm.sittingsPackageId,
+                        outletId: userOutletId
+                    });
                     showMessage('Sittings package assigned! (Could not generate invoice)', 'success');
                 }
 
@@ -727,7 +789,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     initialServices: []
                 });
                 setAssignSittingsServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
-                setAssignSittingsServiceItems([{ serviceId: '', serviceName: '', quantity: 1, price: 0, total: 0, staffId: '', staffName: '' }]);
 
                 setTimeout(() => {
                     loadData();
@@ -741,6 +802,105 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
     };
 
+    // Fetch sitting redemption history
+    const fetchSittingRedemptionHistory = async (customerPackageId: string) => {
+        try {
+            const response = await fetch('/api/sittings-packages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'get_redemption_history',
+                    customerPackageId
+                })
+            });
+            
+            if (response.ok) {
+                const redemptions = await response.json();
+                console.log('Redemption history received:', redemptions);
+                setSittingRedemptions(redemptions);
+                setShowRedemptionHistory(true);
+            } else {
+                showMessage('Failed to fetch redemption history', 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching redemption history:', error);
+            showMessage('Error fetching redemption history', 'error');
+        }
+    };
+    // Generate invoice for a past sitting redemption
+    const generateOldSittingInvoice = async (record: any) => {
+        try {
+            console.log('Generating old sitting invoice for record:', record);
+            setLoading(true);
+
+            // Find the customer package for this record
+            const pkg = customerSittingsPackages.find(p => p.id === record.customerPackageId);
+            console.log('Found customer package:', pkg);
+            if (!pkg) {
+                showMessage('Could not find package information', 'error');
+                return;
+            }
+
+            // Find the template and outlet
+            const template = sittingsTemplates.find(t => t.id === pkg.sittingsPackageId);
+            // Use userOutletId as primary, but fallback to package outlet or any available outlet if needed
+            const outlet = outlets.find(o => o.id === userOutletId) || 
+                          outlets.find(o => o.id === pkg.outletId) || 
+                          outlets[0];
+
+            console.log('Template:', template);
+            console.log('Outlet:', outlet);
+
+            if (!template) {
+                showMessage('Could not find package template', 'error');
+                return;
+            }
+
+            if (!outlet) {
+                showMessage('Could not find outlet information', 'error');
+                return;
+            }
+
+            // Create a temporary package object with the redemption data
+            const redemptionPackage = {
+                ...pkg,
+                usedSittings: record.usedSittings,
+                remainingSittings: pkg.totalSittings - record.usedSittings,
+                serviceName: record.serviceName || pkg.serviceName || 'N/A', // Ensure service name is available
+                // For initial sitting, use the staff name from the record
+                ...(record.isInitial && { initialStaffName: record.staffName })
+            };
+            console.log('Redemption package data:', redemptionPackage);
+            // Generate invoice image for this specific redemption
+            const invoiceImage = await generateBrandedSittingsInvoiceImage(
+                redemptionPackage,
+                template,
+                outlet,
+                record.staffName  // Pass staff name to ensure it displays in invoice
+            );
+
+            // Show preview and enable WhatsApp sharing
+            setInvoicePreview(invoiceImage);
+            setPreviewPackage(redemptionPackage as unknown as CustomerPackage);
+            setPreviewTemplate({
+                id: template.id,
+                name: template.name,
+                packageValue: 0,
+                serviceValue: pkg.serviceValue || 0
+            });
+            setPreviewOutlet(outlet);
+            
+            // Set WhatsApp sharing data
+            setWhatsAppImageData(invoiceImage);
+            setWhatsAppPackage(redemptionPackage as unknown as CustomerPackage);
+            setShowWhatsAppPreview(true);
+            showMessage('Invoice generated successfully', 'success');        } catch (error) {
+            console.error('Error generating old invoice:', error);
+            showMessage('Error generating invoice: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
     // Handle Redeem Sittings
     const handleRedeemSittings = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -772,11 +932,32 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
             if (response.ok) {
                 const result = await response.json();
-                
+
                 // Find customer package and template for invoice generation
                 let customerPkg = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
                 const template = sittingsTemplates.find(t => t.id === customerPkg?.sittingsPackageId);
-                const outlet = outlets.find(o => o.id === userOutletId || o.id === customerPkg?.outletId);
+                // Use userOutletId as primary, but fallback to package outlet or any available outlet if needed
+                const outlet = outlets.find(o => o.id === userOutletId) || 
+                              outlets.find(o => o.id === customerPkg?.outletId) || 
+                              outlets[0];
+
+                console.log('Redemption template lookup:', { 
+                    templateId: customerPkg?.sittingsPackageId, 
+                    foundTemplate: !!template, 
+                    template, 
+                    availableTemplates: sittingsTemplates.map(t => ({id: t.id, name: t.name})) 
+                });
+                console.log('Redemption outlet lookup:', { 
+                    outletId: userOutletId || customerPkg?.outletId, 
+                    foundOutlet: !!outlet, 
+                    outlet, 
+                    availableOutlets: outlets.map(o => ({id: o.id, name: o.name})) 
+                });
+                console.log('Customer package lookup:', { 
+                    packageId: redeemSittingsForm.customerSittingsPackageId, 
+                    foundPackage: !!customerPkg, 
+                    customerPkg 
+                });
 
                 if (customerPkg && template && outlet) {
                     try {
@@ -799,7 +980,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                             customerPkg,
                             template,
                             outlet,
-                            redeemSittingsForm.staffName
+                            redeemSittingsForm.staffName  // Pass staff name to ensure it displays in invoice
                         );
 
                         // Show preview modal
@@ -808,9 +989,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                         setShowWhatsAppPreview(true);
                     } catch (error) {
                         console.error('Error generating invoice:', error);
-                        showMessage('Sitting redeemed! (Could not generate invoice)', 'success');
+                        console.error('Redemption invoice generation params:', { customerPkg, template, outlet, staffName: redeemSittingsForm.staffName });
+                        showMessage('Sitting redeemed! (Could not generate invoice: ' + (error.message || 'Unknown error') + ')', 'success');
                     }
                 } else {
+                    console.error('Missing data for redemption invoice generation:', { 
+                        hasCustomerPkg: !!customerPkg, 
+                        hasTemplate: !!template, 
+                        hasOutlet: !!outlet,
+                        packageId: redeemSittingsForm.customerSittingsPackageId,
+                        templateId: customerPkg?.sittingsPackageId,
+                        outletId: userOutletId || customerPkg?.outletId
+                    });
                     showMessage('Sitting redeemed successfully!', 'success');
                 }
 
@@ -818,7 +1008,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     customerSittingsPackageId: '',
                     staffId: '',
                     staffName: '',
-                    redemptionDate: new Date().toISOString().split('T')[0]
+                    redemptionDate: new Date().toISOString().split('T')[0],
+                    gstPercentage: 5
                 });
 
                 setTimeout(() => {
@@ -1558,8 +1749,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                if (template && outlets.find(o => o.id === userOutletId)) {
-                                                                    previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
+                                                                if (template && (outlets.find(o => o.id === userOutletId) || outlets[0])) {
+                                                                    previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId) || outlets[0]);
                                                                 }
                                                             }}
                                                             className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
@@ -1677,8 +1868,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
-                                                                                        if (template && outlets.find(o => o.id === userOutletId)) {
-                                                                                            previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId)!);
+                                                                                        if (template && (outlets.find(o => o.id === userOutletId) || outlets[0])) {
+                                                                                            previewInvoice(pkg, template, outlets.find(o => o.id === userOutletId) || outlets[0]);
                                                                                         }
                                                                                     }}
                                                                                     className="px-3 py-1 bg-blue-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium inline-block"
@@ -2162,7 +2353,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         </button>
                                                     )}
                                                 </div>
-                                                
+
                                                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                                                     <table className="w-full">
                                                         <thead className="bg-gray-50 border-b border-gray-200">
@@ -2180,15 +2371,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                     <td className="px-4 py-3">
                                                                         <select
                                                                             value={item.staffName}
-                                                                            onChange={(e) => {
-                                                                                const staffMember = staff.find(s => s.name === e.target.value);
-                                                                                handleAssignSittingsServiceItemChange(index, 'staffName', e.target.value);
-                                                                                if (staffMember) {
-                                                                                    const newItems = [...assignSittingsServiceItems];
-                                                                                    newItems[index].staffId = staffMember.id;
-                                                                                    setAssignSittingsServiceItems(newItems);
-                                                                                }
-                                                                            }}
+                                                                            onChange={(e) => handleAssignSittingsServiceItemChange(index, 'staffName', e.target.value)}
                                                                             className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
                                                                         >
                                                                             <option value="">-- Select staff --</option>
@@ -2239,7 +2422,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         </tbody>
                                                     </table>
                                                 </div>
-                                                
+
                                                 <p className="text-xs text-gray-500 mt-2">
                                                     Optional: Add the first sitting service details. Leave empty if no sitting is redeemed during assignment.
                                                 </p>
@@ -2382,13 +2565,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                     {/* Selected Package Info */}
                                                     {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId) && (
                                                         <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                                                            <div className="flex justify-between items-start">
+                                                            <div className="flex justify-between items-start mb-4">
                                                                 <div>
                                                                     <h4 className="text-lg font-semibold text-gray-900 mb-2">
                                                                         {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.customerName}
                                                                     </h4>
                                                                     <p className="text-gray-600">
-                                                                        Remaining: <span className="font-bold text-green-600">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings}</span> sittings
+                                                                        Mobile: {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.customerMobile}
                                                                     </p>
                                                                 </div>
                                                                 <button
@@ -2397,6 +2580,36 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                                     className="text-brand-primary hover:underline text-sm font-medium"
                                                                 >
                                                                     Change
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                                                                <div className="bg-white p-3 rounded border">
+                                                                    <p className="text-xs text-gray-500">Package</p>
+                                                                    <p className="font-semibold">{sittingsTemplates.find(t => t.id === customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.sittingsPackageId)?.name || 'N/A'}</p>
+                                                                </div>
+                                                                <div className="bg-white p-3 rounded border">
+                                                                    <p className="text-xs text-gray-500">Total Sittings</p>
+                                                                    <p className="font-semibold">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.totalSittings}</p>
+                                                                </div>
+                                                                <div className="bg-white p-3 rounded border">
+                                                                    <p className="text-xs text-gray-500">Remaining Sittings</p>
+                                                                    <p className="font-semibold text-green-600">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings}</p>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="mt-4 pt-4 border-t border-gray-300">
+                                                                <p className="text-xs text-gray-500">Service</p>
+                                                                <p className="font-semibold">{customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.serviceName || 'N/A'}</p>
+                                                            </div>
+                                                            
+                                                            <div className="mt-4">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => fetchSittingRedemptionHistory(redeemSittingsForm.customerSittingsPackageId)}
+                                                                    className="text-sm text-brand-primary hover:underline font-medium"
+                                                                >
+                                                                    View Redemption History
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -2413,120 +2626,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         />
                                                     </div>
 
-                                                    {/* Service Items */}
+                                                    {/* Staff Selection */}
                                                     <div>
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <label className="block text-sm font-medium text-gray-700">
-                                                                Services to Redeem
-                                                            </label>
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleAddRedeemSittingsServiceItem}
-                                                                className="text-sm text-brand-primary hover:underline font-medium"
-                                                            >
-                                                                + Add Service
-                                                            </button>
-                                                        </div>
-
-                                                        <div className="space-y-4">
-                                                            {redeemSittingsServiceItems.map((item, index) => (
-                                                                <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg border border-gray-300">
-                                                                    <div className="md:col-span-3">
-                                                                        <label className="block text-xs text-gray-600 mb-1">Staff Name</label>
-                                                                        <select
-                                                                            value={item.staffName}
-                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'staffName', e.target.value)}
-                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                        >
-                                                                            <option value="">Select staff (optional)</option>
-                                                                            {staff && staff.length > 0 ? (
-                                                                                staff.map(staffMember => (
-                                                                                    <option key={staffMember.id} value={staffMember.name}>
-                                                                                        {staffMember.name}
-                                                                                    </option>
-                                                                                ))
-                                                                            ) : (
-                                                                                <option disabled>No staff available</option>
-                                                                            )}
-                                                                        </select>
-                                                                    </div>
-
-                                                                    <div className="md:col-span-3">
-                                                                        <label className="block text-xs text-gray-600 mb-1">Service Name *</label>
-                                                                        <input
-                                                                            type="text"
-                                                                            list={`sittings-services-list-redeem-${index}`}
-                                                                            value={item.serviceName}
-                                                                            onChange={(e) => {
-                                                                                const selectedService = services.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
-                                                                                const newItems = [...redeemSittingsServiceItems];
-                                                                                newItems[index].serviceName = e.target.value;
-                                                                                if (selectedService) {
-                                                                                    newItems[index].serviceId = selectedService.id;
-                                                                                    newItems[index].price = selectedService.price;
-                                                                                    newItems[index].total = newItems[index].quantity * selectedService.price;
-                                                                                } else {
-                                                                                    newItems[index].serviceId = '';
-                                                                                }
-                                                                                setRedeemSittingsServiceItems(newItems);
-                                                                            }}
-                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                            placeholder="Type or select service"
-                                                                            required
-                                                                        />
-                                                                        <datalist id={`sittings-services-list-redeem-${index}`}>
-                                                                            {services.map(service => (
-                                                                                <option key={service.id} value={service.name}>
-                                                                                    {service.name} - ₹{service.price.toFixed(2)}
-                                                                                </option>
-                                                                            ))}
-                                                                        </datalist>
-                                                                    </div>
-
-                                                                    <div className="md:col-span-2">
-                                                                        <label className="block text-xs text-gray-600 mb-1">Quantity *</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={item.quantity}
-                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
-                                                                            min="1"
-                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                            required
-                                                                        />
-                                                                    </div>
-
-                                                                    <div className="md:col-span-2">
-                                                                        <label className="block text-xs text-gray-600 mb-1">Price (₹) *</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={item.price}
-                                                                            onChange={(e) => handleRedeemSittingsServiceItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                                                                            min="0"
-                                                                            step="0.01"
-                                                                            className="w-full bg-white text-gray-900 p-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                                                            required
-                                                                        />
-                                                                    </div>
-
-                                                                    <div className="md:col-span-2">
-                                                                        <label className="block text-xs text-gray-600 mb-1">Total (₹)</label>
-                                                                        <div className="font-semibold text-gray-900">₹{item.total.toFixed(2)}</div>
-                                                                    </div>
-
-                                                                    {redeemSittingsServiceItems.length > 1 && (
-                                                                        <div className="md:col-span-1">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => handleRemoveRedeemSittingsServiceItem(index)}
-                                                                                className="w-full bg-red-100 text-red-600 p-2 rounded hover:bg-red-200 transition-colors"
-                                                                            >
-                                                                                🗑
-                                                                            </button>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">Staff Member *</label>
+                                                        <select
+                                                            value={redeemSittingsForm.staffName}
+                                                            onChange={(e) => {
+                                                                const staffMember = staff.find(s => s.name === e.target.value);
+                                                                setRedeemSittingsForm(prev => ({
+                                                                    ...prev,
+                                                                    staffName: e.target.value,
+                                                                    staffId: staffMember?.id || ''
+                                                                }));
+                                                            }}
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-gray-900 bg-white"
+                                                            required
+                                                        >
+                                                            <option value="">Select staff member</option>
+                                                            {staff && staff.length > 0 ? (
+                                                                staff.map(staffMember => (
+                                                                    <option key={staffMember.id} value={staffMember.name}>
+                                                                        {staffMember.name}
+                                                                    </option>
+                                                                ))
+                                                            ) : (
+                                                                <option disabled>No staff available</option>
+                                                            )}
+                                                        </select>
                                                     </div>
 
                                                     {/* GST Percentage */}
@@ -2546,19 +2672,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         </select>
                                                     </div>
 
-                                                    {/* Calculation Summary */}
+                                                    {/* Sitting Information */}
                                                     <div className="bg-gray-50 p-4 rounded-lg space-y-2 mt-4">
                                                         <div className="flex justify-between">
-                                                            <span className="text-gray-600">Subtotal (Before GST):</span>
-                                                            <span className="font-semibold text-gray-900">₹{(calculateServiceSubtotal(redeemSittingsServiceItems) || 0).toFixed(2)}</span>
+                                                            <span className="text-gray-600">Sitting Redeemed:</span>
+                                                            <span className="font-semibold text-gray-900">1 sitting</span>
                                                         </div>
                                                         <div className="flex justify-between">
-                                                            <span className="text-gray-600">GST ({redeemSittingsForm.gstPercentage}%):</span>
-                                                            <span className="font-semibold text-gray-900">₹{((calculateServiceSubtotal(redeemSittingsServiceItems) || 0) * redeemSittingsForm.gstPercentage / 100).toFixed(2)}</span>
-                                                        </div>
-                                                        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-300">
-                                                            <span className="text-gray-900">Total:</span>
-                                                            <span className="text-green-600">₹{((calculateServiceSubtotal(redeemSittingsServiceItems) || 0) + (calculateServiceSubtotal(redeemSittingsServiceItems) || 0) * redeemSittingsForm.gstPercentage / 100).toFixed(2)}</span>
+                                                            <span className="text-gray-600">Remaining Sittings:</span>
+                                                            <span className="font-semibold text-green-600">
+                                                                {customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId)?.remainingSittings - 1}
+                                                            </span>
                                                         </div>
                                                     </div>
 
@@ -2568,7 +2692,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                                         disabled={loading}
                                                         className="w-full bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                                                     >
-                                                        {loading ? 'Redeeming...' : 'Redeem & Generate Bill'}
+                                                        {loading ? 'Redeeming...' : 'Redeem Sitting'}
                                                     </button>
                                                 </form>
                                             </div>
@@ -2688,6 +2812,69 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                     setHistoryRecords([]);
                                 }}
                                 className="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 transition-opacity"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Redemption History Modal */}
+            {showRedemptionHistory && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+                            <h3 className="text-xl font-bold text-gray-900">Sitting Redemption History</h3>
+                            <button
+                                onClick={() => setShowRedemptionHistory(false)}
+                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        
+                        <div className="overflow-y-auto flex-grow p-6">
+                            {sittingRedemptions.length === 0 ? (
+                                <p className="text-gray-500 text-center py-8">No redemption history found</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Staff</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Service</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {sittingRedemptions.map((redemption) => (
+                                                <tr key={redemption.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                    <td className="px-4 py-4 text-sm text-gray-900">{new Date(redemption.redeemedDate).toLocaleDateString()}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-900">{redemption.staffName || 'N/A'}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-900">{redemption.serviceName || 'N/A'}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-900">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => generateOldSittingInvoice(redemption)}
+                                                            className="px-3 py-1 bg-purple-600 text-white rounded hover:opacity-90 transition-opacity text-xs font-medium"
+                                                        >
+                                                            Generate Invoice
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="p-6 border-t border-gray-200 flex justify-end">
+                            <button
+                                onClick={() => setShowRedemptionHistory(false)}
+                                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
                             >
                                 Close
                             </button>
