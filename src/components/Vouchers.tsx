@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Voucher, VoucherStatus, Outlet } from '../types';
+import { Voucher, VoucherStatus, Outlet, User } from '../types';
 import html2canvas from 'html2canvas';
 import { useNotification } from '../hooks/useNotification';
 import { NotificationContainer } from './NotificationContainer';
 
-export const Vouchers: React.FC = () => {
+interface VouchersProps {
+  currentUser?: User;
+}
+
+export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +105,11 @@ export const Vouchers: React.FC = () => {
     [VoucherStatus.EXPIRED]: 'bg-red-100 text-red-800',
   };
 
-  const getOutletName = (outletId: string) => {
+  const getOutletName = (outletId: string | undefined, outletName?: string | null) => {
+    // Use outletName directly from voucher if available, otherwise look it up
+    if (outletName) {
+      return outletName;
+    }
     return outlets.find(o => o.id === outletId)?.name ?? 'Unknown Outlet';
   };
 
@@ -258,9 +266,14 @@ export const Vouchers: React.FC = () => {
     const referringName = successData.customerName || 'Your friend';
     const friendName = successData.recipientName;
     
+    // Get the outlet name from the current user's assigned outlet
+    const outletName = currentUser?.outletId 
+      ? outlets.find(o => o.id === currentUser.outletId)?.name || 'Naturals Salon'
+      : 'Naturals Salon';
+    
     return `Hi *${friendName}*,
 
-  Your friend *${referringName}* recently visited Naturals Salon - *Madinaguda* and thought you'd love the experience too!
+  Your friend *${referringName}* recently visited Naturals Salon - *${outletName}* and thought you'd love the experience too!
 
   We've reserved a special voucher just for you — make sure to use it before *${formattedValidTill}* and enjoy an exclusive pampering session at your nearest Naturals Salon.
 
@@ -348,8 +361,15 @@ export const Vouchers: React.FC = () => {
       return;
     }
 
-    if (outlets.length === 0) {
-      addNotification('No outlets available. Please add an outlet first.', 'error');
+    if (!currentUser?.outletId) {
+      addNotification('Your user account is not assigned to any outlet', 'error');
+      return;
+    }
+
+    // Find the user's outlet to get the outlet code
+    const userOutlet = outlets.find(o => o.id === currentUser.outletId);
+    if (!userOutlet) {
+      addNotification('Outlet not found for your account', 'error');
       return;
     }
 
@@ -371,7 +391,7 @@ export const Vouchers: React.FC = () => {
           action: 'create',
           recipientName: friendsName,
           recipientMobile: friendsMobile,
-          outletCode: outlets[0].code,
+          outletCode: userOutlet.code,
           expiryDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           discountPercentage: 35,
           type: 'Family & Friends',
@@ -499,16 +519,16 @@ export const Vouchers: React.FC = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bill No *</label>
-                  <input
-                    type="text"
-                    placeholder="Enter bill number"
-                    value={issueFormData.billNo}
-                    onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
-                  />
+                   <label className="block text-sm font-semibold text-gray-700 mb-2">Bill No *</label>
+                   <input
+                     type="text"
+                     placeholder="Enter bill number"
+                     value={issueFormData.billNo}
+                     onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
+                   />
+                 </div>
                 </div>
-              </div>
               
               <div className="flex gap-4 mt-8">
                 <button
@@ -613,7 +633,11 @@ export const Vouchers: React.FC = () => {
                   <div className="flex-1 bg-gradient-to-b from-pink-50 to-rose-50 p-8 flex flex-col justify-between items-center">
                     <div className="text-center">
                       <img src="/logo.png" alt="Naturals Logo" className="h-16 mb-4" />
-                      <p className="text-gray-800 font-bold text-lg">Madinaguda</p>
+                      <p className="text-gray-800 font-bold text-lg">
+                        {currentUser?.outletId 
+                          ? outlets.find(o => o.id === currentUser.outletId)?.name || 'Naturals Salon'
+                          : 'Naturals Salon'}
+                      </p>
                     </div>
                     
                     {/* Big Discount Centered in Pink Section */}
@@ -786,7 +810,7 @@ export const Vouchers: React.FC = () => {
                               {voucher.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(voucher.outletId)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(voucher.outletId, voucher.outletName)}</td>
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{voucher.redeemedBillNo || '-'}</td>
                         </tr>
                       ))}

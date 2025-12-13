@@ -23,11 +23,9 @@ try {
             } catch (PDOException $e) {
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
                     // Tables don't exist yet, return empty array
-                    error_log("Sittings packages table doesn't exist yet");
                     sendJSON([]);
                     exit;
                 }
-                error_log("Error loading sittings package templates: " . $e->getMessage());
                 throw $e;
             }
             
@@ -50,8 +48,6 @@ try {
             // Get customer sittings packages (optionally filtered by outlet)
             try {
                 $outletId = $_GET['outletId'] ?? null;
-                error_log("=== CUSTOMER SITTINGS PACKAGES QUERY ===");
-                error_log("Outlet ID requested: " . ($outletId ?? 'null/no filter'));
                 
                 if ($outletId) {
                     // Filter by outlet
@@ -64,7 +60,6 @@ try {
                     ");
                     $stmt->execute([':outletId' => $outletId]);
                     $packages = $stmt->fetchAll();
-                    error_log("Loaded customer sittings packages for outlet: $outletId, count: " . count($packages));
                 } else {
                     // No outlet filter, return all packages
                     $stmt = $pdo->query("
@@ -74,24 +69,15 @@ try {
                         ORDER BY csp.assigned_date DESC
                     ");
                     $packages = $stmt->fetchAll();
-                    error_log("Loaded all customer sittings packages, count: " . count($packages));
                 }
             } catch (PDOException $e) {
-                error_log("=== CUSTOMER SITTINGS PACKAGES QUERY ERROR ===");
-                error_log("Outlet ID: " . ($outletId ?? 'NULL'));
-                error_log("Error message: " . $e->getMessage());
-                error_log("Error code: " . $e->getCode());
-                
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
                     // Tables don't exist yet, return empty array
-                    error_log("Customer sittings packages table doesn't exist yet");
                     sendJSON([]);
                     exit;
                 }
                 
-                // Log but return empty array to prevent 500 errors
-                // This helps debugging without breaking the UI
-                error_log("Returning empty array due to query error");
+                // Return empty array to prevent 500 errors
                 sendJSON([]);
                 exit;
             }
@@ -223,22 +209,11 @@ try {
             $assignedDate = $data['assignedDate'];
             $serviceName = isset($data['serviceName']) ? sanitizeString($data['serviceName']) : null;
             $serviceValue = isset($data['serviceValue']) ? floatval($data['serviceValue']) : null;
-            
-            // Debug logging
-            error_log("=== SERVICE DATA RECEIVED ===");
             $serviceId = isset($data['serviceId']) ? sanitizeString($data['serviceId']) : null;
-            error_log("Service ID: " . ($serviceId ?? 'NULL'));
-            error_log("Service Name: " . ($serviceName ?? 'NULL'));
-            error_log("Service Value: " . ($serviceValue ?? 'NULL'));
             $initialStaffId = isset($data['initialStaffId']) ? sanitizeString($data['initialStaffId']) : null;
             $initialStaffName = isset($data['initialStaffName']) ? sanitizeString($data['initialStaffName']) : null;
             $initialSittingDate = isset($data['initialSittingDate']) && validateDate($data['initialSittingDate']) ? $data['initialSittingDate'] : null;
             
-            error_log("=== INITIAL SITTING DATA ===");
-            error_log("Initial staff ID: " . ($initialStaffId ?? 'NULL'));
-            error_log("Initial staff name: " . ($initialStaffName ?? 'NULL'));
-            error_log("Initial sitting date: " . ($initialSittingDate ?? 'NULL'));
-            error_log("Initial sitting date valid: " . (isset($data['initialSittingDate']) && validateDate($data['initialSittingDate']) ? 'YES' : 'NO'));
             // Handle redeemInitialSitting - JavaScript sends true/false as boolean
             $redeemInitialSitting = false;
             if (isset($data['redeemInitialSitting'])) {
@@ -250,13 +225,6 @@ try {
                     $redeemInitialSitting = (bool)$data['redeemInitialSitting'];
                 }
             }
-            
-            error_log("=== SITTINGS ASSIGN DEBUG ===");
-            error_log("Raw data received: " . json_encode($data));
-            error_log("Raw redeemInitialSitting: " . json_encode($data['redeemInitialSitting'] ?? 'NOT SET'));
-            error_log("Type: " . gettype($data['redeemInitialSitting'] ?? null));
-            error_log("After conversion: " . var_export($redeemInitialSitting, true));
-            error_log("usedSittings will be: " . ($redeemInitialSitting ? '1' : '0'));
             
             if (!$customerMobile) {
                 sendError('Invalid mobile number format. Please enter a valid 10-digit Indian mobile number.', 400);
@@ -434,31 +402,9 @@ try {
                         ':usedSittings' => $usedSittings
                     ]);
                 }
-                
-                error_log("=== SITTINGS INSERT RESULT ===");
-                error_log("Insert successful: " . ($insertResult ? 'YES' : 'NO'));
-                error_log("Used sittings value: " . $usedSittings);
-                error_log("Redeem initial sitting: " . ($redeemInitialSitting ? 'TRUE' : 'FALSE'));
             } catch (PDOException $e) {
-                error_log("=== SITTINGS INSERT ERROR ===");
-                error_log("Error message: " . $e->getMessage());
-                error_log("Used sittings value: " . $usedSittings);
-                error_log("Redeem initial sitting: " . ($redeemInitialSitting ? 'TRUE' : 'FALSE'));
-                error_log("Has initial columns: " . ($hasInitialColumns ? 'YES' : 'NO'));
-                
-                // Re-throw the exception
-                error_log("Re-throwing exception");
                 throw $e;
             }
-            
-            error_log("=== SITTINGS PACKAGE RESPONSE ===");
-            error_log("Redeem initial sitting received: " . ($redeemInitialSitting ? 'TRUE' : 'FALSE'));
-            error_log("Used sittings set: " . $usedSittings);
-            error_log("Total sittings: " . $totalSittings);
-            error_log("Remaining sittings: " . ($totalSittings - $usedSittings));
-            error_log("Initial staff ID: " . $initialStaffId);
-            error_log("Initial staff name: " . $initialStaffName);
-            error_log("Initial sitting date: " . $initialSittingDate);
             
             sendJSON([
                 'success' => true,

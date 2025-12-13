@@ -1,7 +1,8 @@
 <?php
-// Enable error reporting for debugging
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/packages_error.log');
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
@@ -22,63 +23,87 @@ try {
         
         if ($type === 'templates') {
             // Get all package templates
-            $stmt = $pdo->query("SELECT * FROM package_templates ORDER BY created_at DESC");
-            $templates = $stmt->fetchAll();
-            
-            $templates = array_map(function($t) {
-                return [
-                    'id' => $t['id'],
-                    'name' => $t['name'],
-                    'packageValue' => (float)$t['package_value'],
-                    'serviceValue' => (float)$t['service_value'],
-                    'outletId' => isset($t['outlet_id']) ? $t['outlet_id'] : null
-                ];
-            }, $templates);
-            
-            sendJSON($templates);
+            try {
+                $stmt = $pdo->query("SELECT * FROM package_templates ORDER BY created_at DESC");
+                $templates = $stmt->fetchAll();
+                
+                $templates = array_map(function($t) {
+                    return [
+                        'id' => $t['id'],
+                        'name' => $t['name'],
+                        'packageValue' => (float)$t['package_value'],
+                        'serviceValue' => (float)$t['service_value'],
+                        'outletId' => isset($t['outlet_id']) ? $t['outlet_id'] : null
+                    ];
+                }, $templates);
+                
+                sendJSON($templates);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                    sendJSON([]);
+                    exit;
+                }
+                sendError('Error loading package templates', 500);
+            }
             
         } elseif ($type === 'customer_packages') {
             // Get all customer packages with template data
-            $stmt = $pdo->query("
-                SELECT cp.*, pt.package_value 
-                FROM customer_packages cp
-                LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
-                ORDER BY cp.created_at DESC
-            ");
-            $packages = $stmt->fetchAll();
-            
-            $packages = array_map(function($p) {
-                return [
-                    'id' => $p['id'],
-                    'customerName' => $p['customer_name'],
-                    'customerMobile' => $p['customer_mobile'],
-                    'packageTemplateId' => $p['package_template_id'],
-                    'outletId' => $p['outlet_id'],
-                    'assignedDate' => $p['assigned_date'],
-                    'remainingServiceValue' => (float)$p['remaining_service_value'],
-                    'initialPackageValue' => (float)($p['package_value'] ?? 0)
-                ];
-            }, $packages);
-            
-            sendJSON($packages);
+            try {
+                $stmt = $pdo->query("
+                    SELECT cp.*, pt.package_value 
+                    FROM customer_packages cp
+                    LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
+                    ORDER BY cp.created_at DESC
+                ");
+                $packages = $stmt->fetchAll();
+                
+                $packages = array_map(function($p) {
+                    return [
+                        'id' => $p['id'],
+                        'customerName' => $p['customer_name'],
+                        'customerMobile' => $p['customer_mobile'],
+                        'packageTemplateId' => $p['package_template_id'],
+                        'outletId' => $p['outlet_id'],
+                        'assignedDate' => $p['assigned_date'],
+                        'remainingServiceValue' => (float)$p['remaining_service_value'],
+                        'initialPackageValue' => (float)($p['package_value'] ?? 0)
+                    ];
+                }, $packages);
+                
+                sendJSON($packages);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                    sendJSON([]);
+                    exit;
+                }
+                sendError('Error loading customer packages', 500);
+            }
             
         } elseif ($type === 'service_records') {
             // Get all service records
-            $stmt = $pdo->query("SELECT * FROM service_records ORDER BY created_at DESC");
-            $records = $stmt->fetchAll();
-            
-            $records = array_map(function($r) {
-                return [
-                    'id' => $r['id'],
-                    'customerPackageId' => $r['customer_package_id'],
-                    'serviceName' => $r['service_name'],
-                    'serviceValue' => (float)$r['service_value'],
-                    'redeemedDate' => $r['redeemed_date'],
-                    'transactionId' => $r['transaction_id']
-                ];
-            }, $records);
-            
-            sendJSON($records);
+            try {
+                $stmt = $pdo->query("SELECT * FROM service_records ORDER BY created_at DESC");
+                $records = $stmt->fetchAll();
+                
+                $records = array_map(function($r) {
+                    return [
+                        'id' => $r['id'],
+                        'customerPackageId' => $r['customer_package_id'],
+                        'serviceName' => $r['service_name'],
+                        'serviceValue' => (float)$r['service_value'],
+                        'redeemedDate' => $r['redeemed_date'],
+                        'transactionId' => $r['transaction_id']
+                    ];
+                }, $records);
+                
+                sendJSON($records);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                    sendJSON([]);
+                    exit;
+                }
+                sendError('Error loading service records', 500);
+            }
         } else {
             sendError('Invalid type parameter', 400);
         }
@@ -117,7 +142,7 @@ try {
                     ORDER BY outlet_id ASC 
                     LIMIT 1
                 ");
-                $stmt->execute(['userId' => $_SESSION['user_id']]);
+                $stmt->execute([':userId' => $_SESSION['user_id']]);
                 $userOutlet = $stmt->fetch();
                 if ($userOutlet) {
                     $outletId = $userOutlet['outlet_id'];
@@ -181,14 +206,14 @@ try {
             
             // Check if template is used in any customer packages
             $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM customer_packages WHERE package_template_id = :id");
-            $stmt->execute(['id' => $templateId]);
-            $result = $stmt->fetch();
-            if ($result['count'] > 0) {
-                sendError('Cannot delete template that is used in customer packages', 409);
-            }
-            
-            $stmt = $pdo->prepare("DELETE FROM package_templates WHERE id = :id");
-            $stmt->execute(['id' => $templateId]);
+             $stmt->execute([':id' => $templateId]);
+             $result = $stmt->fetch();
+             if ($result['count'] > 0) {
+                 sendError('Cannot delete template that is used in customer packages', 409);
+             }
+             
+             $stmt = $pdo->prepare("DELETE FROM package_templates WHERE id = :id");
+             $stmt->execute([':id' => $templateId]);
             
             if ($stmt->rowCount() === 0) {
                 sendError('Template not found', 404);
@@ -252,7 +277,7 @@ try {
                     ORDER BY outlet_id ASC 
                     LIMIT 1
                 ");
-                $stmt->execute(['userId' => $_SESSION['user_id']]);
+                $stmt->execute([':userId' => $_SESSION['user_id']]);
                 $userOutlet = $stmt->fetch();
                 if ($userOutlet) {
                     $outletId = $userOutlet['outlet_id'];
@@ -294,7 +319,7 @@ try {
             
             // Get template to calculate remaining value
             $stmt = $pdo->prepare("SELECT service_value FROM package_templates WHERE id = :id");
-            $stmt->execute(['id' => $packageTemplateId]);
+            $stmt->execute([':id' => $packageTemplateId]);
             $template = $stmt->fetch();
             
             if (!$template) {
@@ -308,27 +333,53 @@ try {
                 sendError('Total initial services value cannot exceed template service value', 400);
             }
             
-            // Begin transaction
-            $pdo->beginTransaction();
-            
-            try {
-                // Create customer package
-                $packageId = generateId('cp-');
-                
-                $stmt = $pdo->prepare("
-                    INSERT INTO customer_packages (id, customer_name, customer_mobile, package_template_id, outlet_id, assigned_date, remaining_service_value)
-                    VALUES (:id, :customerName, :customerMobile, :packageTemplateId, :outletId, :assignedDate, :remainingValue)
-                ");
-                
-                $stmt->execute([
-                    'id' => $packageId,
-                    'customerName' => $customerName,
-                    'customerMobile' => $customerMobile,
-                    'packageTemplateId' => $packageTemplateId,
-                    'outletId' => $outletId,
-                    'assignedDate' => $assignedDate,
-                    'remainingValue' => $remainingValue
-                ]);
+            // Get outlet code for invoice number generation
+             $outletStmt = $pdo->prepare("SELECT code FROM outlets WHERE id = :outletId");
+             $outletStmt->execute([':outletId' => $outletId]);
+             $outlet = $outletStmt->fetch();
+             
+             if (!$outlet) {
+                 sendError('Outlet not found', 404);
+             }
+             
+             $outletCode = $outlet['code'];
+             
+             // Generate incremental PACKAGE invoice number for this outlet (PKG prefix)
+             $lastPackageInvoiceStmt = $pdo->prepare("SELECT invoice_number FROM package_invoices WHERE outlet_id = :outletId ORDER BY created_at DESC LIMIT 1");
+             $lastPackageInvoiceStmt->execute([':outletId' => $outletId]);
+             $lastPackageInvoice = $lastPackageInvoiceStmt->fetch();
+             
+             if ($lastPackageInvoice) {
+                 // Extract the numeric part after PKG-
+                 $lastNumber = (int)substr($lastPackageInvoice['invoice_number'], 4); // Skip "PKG-"
+                 $newNumber = $lastNumber + 1;
+             } else {
+                 $newNumber = 1;
+             }
+             
+             $packageInvoiceNumber = sprintf("PKG-%06d", $newNumber);
+             
+             // Begin transaction
+             $pdo->beginTransaction();
+             
+             try {
+                 // Create customer package
+                 $packageId = generateId('cp-');
+                 
+                 $stmt = $pdo->prepare("
+                     INSERT INTO customer_packages (id, customer_name, customer_mobile, package_template_id, outlet_id, assigned_date, remaining_service_value)
+                     VALUES (:id, :customerName, :customerMobile, :packageTemplateId, :outletId, :assignedDate, :remainingValue)
+                 ");
+                 
+                 $stmt->execute([
+                     ':id' => $packageId,
+                     ':customerName' => $customerName,
+                     ':customerMobile' => $customerMobile,
+                     ':packageTemplateId' => $packageTemplateId,
+                     ':outletId' => $outletId,
+                     ':assignedDate' => $assignedDate,
+                     ':remainingValue' => $remainingValue
+                 ]);
                 
                 // Create initial service records and update staff targets
                 $transactionId = generateId('txn-');
@@ -343,7 +394,7 @@ try {
                     // Get staff name from database if not provided
                     if (empty($staffName) && !empty($staffId)) {
                         $staffStmt = $pdo->prepare("SELECT name FROM staff WHERE id = :staffId");
-                        $staffStmt->execute(['staffId' => $staffId]);
+                        $staffStmt->execute([':staffId' => $staffId]);
                         $staffRow = $staffStmt->fetch();
                         if ($staffRow) {
                             $staffName = $staffRow['name'];
@@ -358,13 +409,13 @@ try {
                     ");
                     
                     $stmt->execute([
-                        'id' => $recordId,
-                        'packageId' => $packageId,
-                        'serviceName' => $serviceName,
-                        'serviceValue' => $serviceValue,
-                        'redeemedDate' => $assignedDate,
-                        'transactionId' => $transactionId,
-                        'staffName' => $staffName
+                        ':id' => $recordId,
+                        ':packageId' => $packageId,
+                        ':serviceName' => $serviceName,
+                        ':serviceValue' => $serviceValue,
+                        ':redeemedDate' => $assignedDate,
+                        ':transactionId' => $transactionId,
+                        ':staffName' => $staffName
                     ]);
                     
                     // Update staff target with percentage
@@ -395,12 +446,73 @@ try {
                         'transactionId' => $transactionId
                     ];
                 }
-                
-                $pdo->commit();
-                
-                sendJSON([
-                    'success' => true,
-                    'newPackage' => [
+                 
+                 // Create PACKAGE invoice for the package assignment
+                 $packageInvoiceId = generateId('pkg-inv-');
+                 $subtotal = $data['totalAmount'] ?? 0;
+                 $gstPercentage = $data['gstPercentage'] ?? 0;
+                 $gstAmount = $data['gstAmount'] ?? 0;
+                 $totalAmount = $data['totalAmount'] ?? 0;
+                 
+                 try {
+                     $stmt = $pdo->prepare("
+                         INSERT INTO package_invoices (id, invoice_number, customer_name, customer_mobile, customer_package_id, package_template_id, outlet_id, user_id, invoice_date, subtotal, gst_percentage, gst_amount, total_amount, payment_mode, notes, created_at, updated_at)
+                         VALUES (:id, :invoiceNumber, :customerName, :customerMobile, :customerPackageId, :packageTemplateId, :outletId, :userId, :invoiceDate, :subtotal, :gstPercentage, :gstAmount, :totalAmount, :paymentMode, :notes, :createdAt, :updatedAt)
+                     ");
+                     
+                     $stmt->execute([
+                         ':id' => $packageInvoiceId,
+                         ':invoiceNumber' => $packageInvoiceNumber,
+                         ':customerName' => $customerName,
+                         ':customerMobile' => $customerMobile,
+                         ':customerPackageId' => $packageId,
+                         ':packageTemplateId' => $packageTemplateId,
+                         ':outletId' => $outletId,
+                         ':userId' => $_SESSION['user_id'] ?? null,
+                         ':invoiceDate' => $assignedDate,
+                         ':subtotal' => $subtotal,
+                         ':gstPercentage' => $gstPercentage,
+                         ':gstAmount' => $gstAmount,
+                         ':totalAmount' => $totalAmount,
+                         ':paymentMode' => 'Package Assignment',
+                         ':notes' => 'Auto-generated for package assignment',
+                         ':createdAt' => date('Y-m-d H:i:s'),
+                         ':updatedAt' => date('Y-m-d H:i:s')
+                     ]);
+                 } catch (PDOException $e) {
+                     error_log("Package invoice INSERT failed: " . $e->getMessage());
+                     throw $e;
+                 }
+                 
+                 // Add package invoice items for each service
+                 foreach ($processedServices as $service) {
+                     $itemId = generateId('pii-');
+                     $serviceName = $service['serviceName'];
+                     $serviceValue = $service['serviceValue'];
+                     $staffName = $service['staffName'] ?? '';
+                     
+                     $stmt = $pdo->prepare("
+                         INSERT INTO package_invoice_items (id, package_invoice_id, staff_name, service_name, quantity, unit_price, amount)
+                         VALUES (:id, :packageInvoiceId, :staffName, :serviceName, :quantity, :unitPrice, :amount)
+                     ");
+                     
+                     $stmt->execute([
+                         ':id' => $itemId,
+                         ':packageInvoiceId' => $packageInvoiceId,
+                         ':staffName' => $staffName,
+                         ':serviceName' => $serviceName,
+                         ':quantity' => 1,
+                         ':unitPrice' => $serviceValue,
+                         ':amount' => $serviceValue
+                     ]);
+                 }
+                 
+                 $pdo->commit();
+                 
+                 sendJSON([
+                     'success' => true,
+                     'packageInvoiceNumber' => $packageInvoiceNumber,
+                     'newPackage' => [
                         'id' => $packageId,
                         'customerName' => $customerName,
                         'customerMobile' => $customerMobile,
@@ -497,8 +609,8 @@ try {
                 ");
                 
                 $stmt->execute([
-                    'id' => $packageId,
-                    'remainingValue' => $newRemainingValue
+                    ':id' => $packageId,
+                    ':remainingValue' => $newRemainingValue
                 ]);
                 
                 // Create service records and update staff targets
@@ -514,7 +626,7 @@ try {
                     // Get staff name from database if not provided
                     if (empty($staffName) && !empty($staffId)) {
                         $staffStmt = $pdo->prepare("SELECT name FROM staff WHERE id = :staffId");
-                        $staffStmt->execute(['staffId' => $staffId]);
+                        $staffStmt->execute([':staffId' => $staffId]);
                         $staffRow = $staffStmt->fetch();
                         if ($staffRow) {
                             $staffName = $staffRow['name'];
@@ -529,13 +641,13 @@ try {
                     ");
                     
                     $stmt->execute([
-                        'id' => $recordId,
-                        'packageId' => $packageId,
-                        'serviceName' => $serviceName,
-                        'serviceValue' => $serviceValue,
-                        'redeemedDate' => $redeemDate,
-                        'transactionId' => $transactionId,
-                        'staffName' => $staffName
+                        ':id' => $recordId,
+                        ':packageId' => $packageId,
+                        ':serviceName' => $serviceName,
+                        ':serviceValue' => $serviceValue,
+                        ':redeemedDate' => $redeemDate,
+                        ':transactionId' => $transactionId,
+                        ':staffName' => $staffName
                     ]);
                     
                     // Update staff target with percentage
@@ -628,12 +740,10 @@ try {
         sendError('Method not allowed', 405);
     }
 } catch (Exception $e) {
-    error_log("PACKAGES API ERROR: " . $e->getMessage());
-    error_log("PACKAGES API TRACE: " . $e->getTraceAsString());
+    $errorMsg = 'Server error: ' . $e->getMessage();
+    $errorDetails = "File: " . $e->getFile() . "\nLine: " . $e->getLine() . "\nTrace: " . $e->getTraceAsString();
+    error_log($errorMsg . "\n" . $errorDetails);
     http_response_code(500);
-    echo json_encode([
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
+    sendError($errorMsg, 500);
     exit();
 }

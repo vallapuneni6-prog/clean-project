@@ -38,7 +38,7 @@ function App() {
     const token = localStorage.getItem('authToken')
     const storedAdminStatus = localStorage.getItem('isAdmin') === 'true'
     const storedSuperAdminStatus = localStorage.getItem('isSuperAdmin') === 'true'
-    const storedView = localStorage.getItem('currentView') || 'vouchers'
+    const storedView = localStorage.getItem('currentView')
     
     if (token) {
       // Try to fetch user info from session-based auth endpoint
@@ -52,22 +52,25 @@ function App() {
           console.log('User info response:', data);
           if (data.id) {
             const isAdminUser = data.role === 'admin';
+            const isSuperAdmin = data.isSuperAdmin || false;
             setIsLoggedIn(true);
             setIsAdmin(isAdminUser);
             localStorage.setItem('isAdmin', isAdminUser.toString());
-            localStorage.setItem('isSuperAdmin', (data.isSuperAdmin || false).toString());
+            localStorage.setItem('isSuperAdmin', isSuperAdmin.toString());
             const userObj: User = { 
               id: data.id, 
               username: data.username, 
               name: data.name || data.username, 
               role: data.role, 
-              isSuperAdmin: data.isSuperAdmin || false, 
+              isSuperAdmin: isSuperAdmin, 
               outletId: data.outletId || null, 
               outletIds: data.outletIds || [] 
             };
             setCurrentUser(userObj);
             localStorage.setItem('currentUser', JSON.stringify(userObj));
-            setCurrentView(storedView);
+            // Set default view: home-super for super admin, otherwise use stored view or default to vouchers
+            const defaultView = isSuperAdmin ? 'home-super' : (storedView || 'vouchers');
+            setCurrentView(defaultView);
             loadData();
           } else {
             // Session expired, redirect to login
@@ -164,7 +167,7 @@ function App() {
       case 'home':
         return <Home vouchers={vouchers} packages={packages} outlets={outlets} isAdmin={isAdmin} currentUser={currentUser} />
       case 'vouchers':
-        return isAdmin ? <VouchersTable vouchers={vouchers} outlets={outlets} currentUser={currentUser} /> : <Vouchers />
+        return isAdmin ? <VouchersTable vouchers={vouchers} outlets={outlets} currentUser={currentUser} /> : <Vouchers currentUser={currentUser} />
       case 'packages':
         return isAdmin ? <Packages currentUser={currentUser} /> : <UserDashboard currentUser={currentUser} outlets={outlets} />
       case 'invoices':

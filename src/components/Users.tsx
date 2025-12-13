@@ -193,9 +193,15 @@ export const Users: React.FC<UsersProps> = ({ currentUser }) => {
         }
 
         // Validate outlet assignment based on role
-        if (formData.role === 'user' && formData.outletIds.length === 0) {
-            warning('Regular users must have at least one outlet assigned');
-            return;
+        if (formData.role === 'user') {
+            if (formData.outletIds.length === 0) {
+                warning('Regular users must have exactly one outlet assigned');
+                return;
+            }
+            if (formData.outletIds.length > 1) {
+                warning('Regular users can only have one outlet assigned');
+                return;
+            }
         }
 
         // For admins, warn if no outlets are selected

@@ -127,6 +127,7 @@ function createVoucherMessage($voucherData) {
     $message .= "📄 *Voucher ID:* " . $voucherData['id'] . "\n";
     $message .= "👤 *Recipient:* " . $voucherData['recipient_name'] . "\n";
     $message .= "📱 *Mobile:* " . $voucherData['recipient_mobile'] . "\n";
+    $message .= "🏪 *Outlet:* " . ($voucherData['outlet_name'] ?? 'N/A') . "\n";
     $message .= "📅 *Expiry Date:* " . date('d-m-Y', strtotime($voucherData['expiry_date'])) . "\n";
     $message .= "🎁 *Discount:* " . $voucherData['discount_percentage'] . "%\n";
     $message .= "🏷️ *Type:* " . $voucherData['type'] . "\n";

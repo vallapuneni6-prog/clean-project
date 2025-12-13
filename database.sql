@@ -258,14 +258,63 @@ CREATE TABLE IF NOT EXISTS service_records (
     redeemed_date DATE NOT NULL,
     outlet_id VARCHAR(50) NOT NULL,
     staff_id VARCHAR(50),
+    staff_name VARCHAR(100),
     invoice_id VARCHAR(50),
     transaction_id VARCHAR(50),
+    customer_package_id VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (outlet_id) REFERENCES outlets(id),
     FOREIGN KEY (staff_id) REFERENCES staff(id),
     FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+    FOREIGN KEY (customer_package_id) REFERENCES customer_packages(id),
     INDEX idx_outlet_id (outlet_id),
-    INDEX idx_transaction_id (transaction_id)
+    INDEX idx_transaction_id (transaction_id),
+    INDEX idx_customer_package_id (customer_package_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14. Create Package Invoices Table
+CREATE TABLE IF NOT EXISTS package_invoices (
+    id VARCHAR(50) PRIMARY KEY,
+    invoice_number VARCHAR(50) UNIQUE NOT NULL,
+    customer_name VARCHAR(100) NOT NULL,
+    customer_mobile VARCHAR(15) NOT NULL,
+    customer_package_id VARCHAR(50) NOT NULL,
+    package_template_id VARCHAR(50) NOT NULL,
+    outlet_id VARCHAR(50) NOT NULL,
+    user_id VARCHAR(50),
+    invoice_date DATE NOT NULL,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    gst_percentage DECIMAL(5, 2) DEFAULT 5.00,
+    gst_amount DECIMAL(10, 2) NOT NULL,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    payment_mode VARCHAR(50),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_package_id) REFERENCES customer_packages(id),
+    FOREIGN KEY (package_template_id) REFERENCES package_templates(id),
+    FOREIGN KEY (outlet_id) REFERENCES outlets(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    INDEX idx_outlet_id (outlet_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_invoice_date (invoice_date),
+    INDEX idx_created_at (created_at),
+    INDEX idx_invoice_number (invoice_number),
+    INDEX idx_customer_package_id (customer_package_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15. Create Package Invoice Items Table
+CREATE TABLE IF NOT EXISTS package_invoice_items (
+    id VARCHAR(50) PRIMARY KEY,
+    package_invoice_id VARCHAR(50) NOT NULL,
+    staff_name VARCHAR(100),
+    service_name VARCHAR(100) NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (package_invoice_id) REFERENCES package_invoices(id) ON DELETE CASCADE,
+    INDEX idx_package_invoice_id (package_invoice_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- All tables created successfully!

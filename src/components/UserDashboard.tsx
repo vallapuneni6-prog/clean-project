@@ -163,7 +163,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 }
             }
         } catch (error) {
-            console.error('Error looking up customer:', error);
+            // Silently fail on lookup errors
         } finally {
             setIsLookingUpCustomer(false);
         }
@@ -203,45 +203,38 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
     useEffect(() => {
         // Reload data when redeem sittings form is opened
-        if (showRedeemSittingsForm) {
-            console.log('Redeem sittings form opened, reloading data...');
-            loadData();
-        }
+         if (showRedeemSittingsForm) {
+             loadData();
+         }
     }, [showRedeemSittingsForm]);
 
     useEffect(() => {
-        // Update filtered packages when redeem form opens to ensure they're visible
-        if (showRedeemSittingsForm && redeemSearchQuerySittings === '') {
-            setFilteredCustomerSittingsPackages(customerSittingsPackages);
-            console.log('Updated filtered sittings packages on form open, count:', customerSittingsPackages.length);
-        }
-    }, [showRedeemSittingsForm, customerSittingsPackages]);
+         // Update filtered packages when redeem form opens to ensure they're visible
+         if (showRedeemSittingsForm && redeemSearchQuerySittings === '') {
+             setFilteredCustomerSittingsPackages(customerSittingsPackages);
+         }
+     }, [showRedeemSittingsForm, customerSittingsPackages]);
 
     useEffect(() => {
-        // Reload data when assign sittings form is opened to ensure latest templates
-        if (showAssignSittingsForm) {
-            console.log('Assign sittings form opened, reloading data...');
-            loadData();
-        }
-    }, [showAssignSittingsForm]);
+         // Reload data when assign sittings form is opened to ensure latest templates
+         if (showAssignSittingsForm) {
+             loadData();
+         }
+     }, [showAssignSittingsForm]);
 
     useEffect(() => {
-        // Reload data when switching to sittings packages tab (assign tab specifically)
-        if (activePackageType === 'sittings' && activeTab === 'assign') {
-            console.log('Switched to sittings assign tab, loading data...');
-            loadData();
-        }
-    }, [activePackageType, activeTab]);
+         // Reload data when switching to sittings packages tab (assign tab specifically)
+         if (activePackageType === 'sittings' && activeTab === 'assign') {
+             loadData();
+         }
+     }, [activePackageType, activeTab]);
 
-    useEffect(() => {
-        console.log('Sittings templates updated:', sittingsTemplates);
-    }, [sittingsTemplates]);
+
 
     // Auto-refresh templates periodically to catch any created in admin panel
     useEffect(() => {
         // Handle custom event when templates are updated
         const handleTemplatesUpdated = (event: any) => {
-            console.log('Templates updated event received:', event.detail);
             loadData();
         };
 
@@ -296,15 +289,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
             if (sittingsTemplatesRes.ok) {
                 const sittingsData = await sittingsTemplatesRes.json();
-                console.log('Sittings templates loaded:', sittingsData);
                 setSittingsTemplates(sittingsData);
-            } else {
-                console.error('Sittings templates API error:', sittingsTemplatesRes.status, sittingsTemplatesRes.statusText);
             }
 
             if (customerSittingsRes.ok) {
                 const data = await customerSittingsRes.json();
-                console.log('Customer sittings packages loaded:', data);
                 const sortedData = data.sort((a: any, b: any) =>
                     new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
                 );
@@ -312,24 +301,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     ...p,
                     assignedDate: new Date(p.assignedDate)
                 })));
-                console.log('Customer sittings packages set to state, count:', sortedData.length);
-            } else {
-                console.error('Customer sittings packages API error:', customerSittingsRes.status, customerSittingsRes.statusText);
             }
 
             if (staffRes.ok) {
                 const staffData = await staffRes.json();
-                console.log('Staff data loaded:', staffData);
                 setStaff(staffData);
-            } else {
-                console.error('Staff API error:', staffRes.status, staffRes.statusText);
             }
 
             if (servicesRes.ok) {
                 setServices(await servicesRes.json());
             }
         } catch (error) {
-            console.error('Failed to load data:', error);
             showMessage('Failed to load data', 'error');
         } finally {
             setLoading(false);

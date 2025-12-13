@@ -7,6 +7,14 @@ require_once 'config/database.php';
 require_once 'helpers/functions.php';
 require_once 'helpers/auth.php';
 
+// Check for template action before setting JSON headers
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+$isTemplateRequest = $action === 'template';
+
+if (!$isTemplateRequest) {
+    header('Content-Type: application/json');
+}
+
 // Function to generate random 5-character alphanumeric code (uppercase)
 function generateVoucherCode() {
     $characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -28,16 +36,28 @@ try {
     $pdo = getDBConnection();
     
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+         if ($action === 'template') {
+             // Download CSV template
+             header('Content-Type: text/csv; charset=utf-8');
+             header('Content-Disposition: attachment; filename="voucher_import_template.csv"');
+             header('Pragma: no-cache');
+             header('Expires: 0');
+             
+             echo "Recipient Name,Recipient Mobile,Outlet Code,Expiry Date,Discount Percentage,Type,Bill No\n";
+             echo "John Doe,9876543210,OUT1,2025-12-31,35,Family & Friends,INV001\n";
+             echo "Jane Smith,9876543211,OUT1,2025-12-31,35,Partner,INV002\n";
+             exit();
+         }
          // Get user info from verified authentication
          $userRole = $_SESSION['user_role'] ?? $user['role'] ?? null;
          $isSuperAdmin = (bool)($_SESSION['is_super_admin'] ?? false);
          
-         // Get all vouchers with outlet phone numbers
+         // Get all vouchers with outlet phone and name
          // Admins see all vouchers, regular users see only their outlet's vouchers
          if ($isSuperAdmin || $userRole === 'admin') {
              // Admin: see all vouchers
              $stmt = $pdo->query("
-                 SELECT v.*, o.phone as outlet_phone 
+                 SELECT v.*, o.phone as outlet_phone, o.name as outlet_name 
                  FROM vouchers v 
                  LEFT JOIN outlets o ON v.outlet_id = o.id 
                  ORDER BY v.created_at DESC
@@ -45,7 +65,7 @@ try {
          } else {
              // Regular user: see only vouchers from their assigned outlets
              $stmt = $pdo->prepare("
-                 SELECT v.*, o.phone as outlet_phone 
+                 SELECT v.*, o.phone as outlet_phone, o.name as outlet_name 
                  FROM vouchers v 
                  LEFT JOIN outlets o ON v.outlet_id = o.id 
                  INNER JOIN user_outlets uo ON v.outlet_id = uo.outlet_id
@@ -64,6 +84,7 @@ try {
                 'recipientMobile' => $v['recipient_mobile'],
                 'outletId' => $v['outlet_id'],
                 'outletPhone' => $v['outlet_phone'],
+                'outletName' => $v['outlet_name'],
                 'issueDate' => $v['issue_date'],
                 'expiryDate' => $v['expiry_date'],
                 'redeemedDate' => $v['redeemed_date'],
@@ -116,8 +137,8 @@ try {
                 sendError('Invalid voucher type. Must be either "Partner" or "Family & Friends".', 400);
             }
             
-            // Get outlet ID and phone from code
-            $stmt = $pdo->prepare("SELECT id, phone FROM outlets WHERE code = :code LIMIT 1");
+            // Get outlet ID, phone, and name from code
+            $stmt = $pdo->prepare("SELECT id, phone, name FROM outlets WHERE code = :code LIMIT 1");
             $stmt->execute(['code' => $outletCode]);
             $outlet = $stmt->fetch();
             
@@ -135,6 +156,19 @@ try {
                     $codesList = implode(', ', $availableCodes);
                     sendError("Invalid outlet code '$outletCode'. Available outlet codes: $codesList", 400);
                 }
+            }
+            
+            // Check if there's already an active (Issued) voucher for this mobile number
+            $existingVoucherStmt = $pdo->prepare("
+                SELECT id FROM vouchers 
+                WHERE recipient_mobile = :mobile AND status = 'Issued'
+                LIMIT 1
+            ");
+            $existingVoucherStmt->execute(['mobile' => $recipientMobile]);
+            $existingVoucher = $existingVoucherStmt->fetch();
+            
+            if ($existingVoucher) {
+                sendError('This mobile number already has an active voucher (ID: ' . $existingVoucher['id'] . '). Please redeem or wait for it to expire before issuing a new one.', 409);
             }
             
             // Generate unique voucher ID with random 5-character alphanumeric code (no prefix)
@@ -169,7 +203,7 @@ try {
             
             // Fetch and return the created voucher
             $stmt = $pdo->prepare("
-                SELECT v.*, o.phone as outlet_phone 
+                SELECT v.*, o.phone as outlet_phone, o.name as outlet_name 
                 FROM vouchers v 
                 LEFT JOIN outlets o ON v.outlet_id = o.id 
                 WHERE v.id = :id
@@ -181,8 +215,10 @@ try {
             $saveAndSend = isset($data['saveAndSend']) && $data['saveAndSend'] === true;
             
             if ($saveAndSend) {
+                // Ensure outlet_name is included in voucher data for WhatsApp message
+                $voucherWithOutletName = array_merge($voucher, ['outlet_name' => $outlet['name']]);
                 // Send WhatsApp message to partner
-                sendWhatsAppMessage($outlet['phone'], $voucher);
+                sendWhatsAppMessage($outlet['phone'], $voucherWithOutletName);
             }
             
             sendJSON([

@@ -1,34 +1,11 @@
 <?php
-// Debug mode for troubleshooting
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', dirname(__DIR__) . '/outlets_debug.log');
-
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
 
-// Direct logging to file for debugging
-$logFile = dirname(__DIR__) . '/outlets_api_trace.log';
-function logToFile($message) {
-    global $logFile;
-    file_put_contents($logFile, "[" . date('Y-m-d H:i:s') . "] " . $message . "\n", FILE_APPEND);
-}
-
-logToFile("=== Request Started ===");
-logToFile("Method: " . $_SERVER['REQUEST_METHOD']);
-if (function_exists('getallheaders')) {
-    logToFile("Headers: " . json_encode(getallheaders()));
-} else {
-    logToFile("HTTP_AUTHORIZATION: " . ($_SERVER['HTTP_AUTHORIZATION'] ?? 'NOT SET'));
-}
-
 try {
     $pdo = getDBConnection();
-    logToFile("✓ Database connected");
     
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        logToFile("=== GET Outlets Request ===");
         
         // Check if user is logged in via session
         session_start();
@@ -36,48 +13,35 @@ try {
         $userRole = $_SESSION['user_role'] ?? null;
         $isSuperAdmin = (bool)($_SESSION['is_super_admin'] ?? false);
         
-        logToFile("Session check - User ID: " . ($currentUserId ?? 'NULL'));
-        logToFile("Session check - Role: " . ($userRole ?? 'NULL'));
-        logToFile("Session check - SuperAdmin: " . ($isSuperAdmin ? 'YES' : 'NO'));
-        
         // Fallback: Also check Authorization header (for API clients)
         if (!$currentUserId) {
-            logToFile("No session user, checking Authorization header...");
             $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
             
             if (preg_match('/Bearer\s+(.+)/', $authHeader, $matches)) {
-                logToFile("✓ Bearer token found");
                 $token = $matches[1];
                 $parts = explode('.', $token);
                 
                 if (count($parts) === 3) {
                     $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
-                    logToFile("Payload: " . json_encode($payload));
                     
                     if ($payload && isset($payload['user_id'])) {
                         $currentUserId = $payload['user_id'];
                         $userRole = $payload['role'] ?? null;
-                        logToFile("JWT user: $currentUserId, Role: $userRole");
                     }
                 }
             }
         }
         
-        logToFile("Final - User ID: " . ($currentUserId ?? 'NULL') . ", Role: " . ($userRole ?? 'NULL'));
-        
         if (!$currentUserId) {
-            logToFile("✗ No user authenticated - returning 401");
             sendJSON([], 401);
             exit;
         }
         
         if ($isSuperAdmin || $userRole === 'admin') {
             // Super admin or regular admin: see all outlets
-            logToFile("Fetching ALL outlets (admin/superadmin)");
             $stmt = $pdo->query("SELECT * FROM outlets ORDER BY name");
         } else {
             // Regular user: see only assigned outlets
-            logToFile("Fetching ASSIGNED outlets for user: $currentUserId");
             $stmt = $pdo->prepare("
                 SELECT DISTINCT o.* FROM outlets o
                 INNER JOIN user_outlets uo ON o.id = uo.outlet_id
@@ -88,7 +52,6 @@ try {
         }
         
         $outlets = $stmt->fetchAll();
-        logToFile("Query returned " . count($outlets) . " outlets");
         
         // Convert database field names to camelCase for frontend
         $outlets = array_map(function($o) {
@@ -103,7 +66,6 @@ try {
             ];
         }, $outlets);
         
-        logToFile("✓ Returning " . count($outlets) . " outlets to client");
         sendJSON($outlets);
         
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -312,7 +274,5 @@ try {
         sendError('Method not allowed', 405);
     }
 } catch (Exception $e) {
-    logToFile("✗ Exception: " . $e->getMessage());
-    logToFile("Stack trace: " . $e->getTraceAsString());
     sendError('Server error: ' . $e->getMessage(), 500);
 }

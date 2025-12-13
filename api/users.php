@@ -1,107 +1,74 @@
 <?php
-// Enable error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
-
-// Add debugging
-file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Users API called\n", FILE_APPEND);
+// Production: Disable error display
+error_reporting(0);
+ini_set('display_errors', 0);
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
 
-// Function to authenticate user from token
-function authenticateUser($pdo) {
-    // Debug: Log all server headers
-    file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] All server headers: " . json_encode($_SERVER) . "\n", FILE_APPEND);
-    
-    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    
-    // Also check for REDIRECT_HTTP_AUTHORIZATION (in case of rewrite rules)
-    if (!$authHeader) {
-        $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-    }
-    file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Auth header: " . $authHeader . "\n", FILE_APPEND);
-    
-    $currentUserId = null;
-    $isSuperAdmin = false;
-    $currentUserData = null;
-    
-    if (preg_match('/Bearer\s+(.+)/', $authHeader, $matches)) {
-        $token = $matches[1];
-        file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Token extracted: " . substr($token, 0, 20) . "...\n", FILE_APPEND);
-        
-        $parts = explode('.', $token);
-        if (count($parts) === 3) {
-            $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
-            file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Payload: " . json_encode($payload) . "\n", FILE_APPEND);
-            
-            if ($payload && isset($payload['user_id'])) {
-                $currentUserId = $payload['user_id'];
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] User ID from token: " . $currentUserId . "\n", FILE_APPEND);
-                
-                // Get user data including role and super admin status
-                $stmt = $pdo->prepare("SELECT role, is_super_admin FROM users WHERE id = :id");
-                $stmt->execute(['id' => $currentUserId]);
-                $currentUserData = $stmt->fetch();
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Current user data: " . json_encode($currentUserData) . "\n", FILE_APPEND);
-                
-                if ($currentUserData) {
-                    $isSuperAdmin = (bool)$currentUserData['is_super_admin'];
-                } else {
-                    file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] User not found in database\n", FILE_APPEND);
-                }
-            } else {
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Invalid payload or missing user_id\n", FILE_APPEND);
-            }
-        } else {
-            file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Invalid token format\n", FILE_APPEND);
-        }
-    } else {
-        file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] No Bearer token found\n", FILE_APPEND);
-    }
-    
-    return [$currentUserId, $isSuperAdmin, $currentUserData];
-}
+// Set JSON header for all responses
+header('Content-Type: application/json');
+
+// Helper function to get current user info from verified auth
+function getCurrentUserInfo() {
+     // Get the session user info from verified auth
+     if (session_status() === PHP_SESSION_NONE) {
+         session_start();
+     }
+     
+     $currentUserId = $_SESSION['user_id'] ?? null;
+     if (!$currentUserId) {
+         return [null, false];
+     }
+     
+     // Fetch is_super_admin from database since it's not in the JWT token
+     $pdo = getDBConnection();
+     $stmt = $pdo->prepare("SELECT is_super_admin FROM users WHERE id = :id");
+     $stmt->execute(['id' => $currentUserId]);
+     $user = $stmt->fetch();
+     $isSuperAdmin = $user ? (bool)$user['is_super_admin'] : false;
+     
+     return [$currentUserId, $isSuperAdmin];
+ }
 
 try {
-    $pdo = getDBConnection();
-    
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        // Get current user from Authorization header
-        list($currentUserId, $isSuperAdmin, $currentUserData) = authenticateUser($pdo);
-        file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Auth result - UserID: " . ($currentUserId ?? 'NULL') . ", isSuperAdmin: " . ($isSuperAdmin ? 'true' : 'false') . ", currentUserData: " . json_encode($currentUserData) . "\n", FILE_APPEND);
+     // Verify authorization for all requests
+     $user = verifyAuthorization(true);
+     $pdo = getDBConnection();
+     
+     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+         // Get current user info
+         list($currentUserId, $isSuperAdmin) = getCurrentUserInfo();
         
         // Build query based on user role
         if ($isSuperAdmin) {
             // Super admin: see all users
-            file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Super admin access - fetching all users\n", FILE_APPEND);
             $stmt = $pdo->query("SELECT id, name, username, role, created_by, is_super_admin FROM users ORDER BY name");
         } else {
             // Regular admin: see only users they created and regular users (not other admins)
             // User: see only themselves
-            if ($currentUserId && $currentUserData) {
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Regular user access - user ID: " . $currentUserId . "\n", FILE_APPEND);
-                if ($currentUserData['role'] === 'admin') {
+            if ($currentUserId) {
+                $stmt = $pdo->prepare("SELECT role FROM users WHERE id = :userId");
+                $stmt->execute(['userId' => $currentUserId]);
+                $currentUserRole = $stmt->fetch()['role'];
+                
+                if ($currentUserRole === 'admin') {
                     // Admins see users they created plus themselves
-                    file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Admin role - fetching created users\n", FILE_APPEND);
                     $stmt = $pdo->prepare("SELECT id, name, username, role, created_by, is_super_admin FROM users WHERE (created_by = :userId AND role = 'user') OR id = :selfId ORDER BY name");
                     $stmt->execute(['userId' => $currentUserId, 'selfId' => $currentUserId]);
                 } else {
                     // Regular users see only themselves
-                    file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Regular user role - fetching own record\n", FILE_APPEND);
                     $stmt = $pdo->prepare("SELECT id, name, username, role, created_by, is_super_admin FROM users WHERE id = :userId ORDER BY name");
                     $stmt->execute(['userId' => $currentUserId]);
                 }
             } else {
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] No current user ID or data - sending 401\n", FILE_APPEND);
                 sendJSON([], 401);
                 exit;
             }
         }
         
         $users = $stmt->fetchAll();
-        file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Users fetched: " . count($users) . "\n", FILE_APPEND);
         
         // Add outlet information and creator info for each user
          foreach ($users as &$user) {
@@ -140,13 +107,10 @@ try {
         $action = $data['action'] ?? '';
         
         if ($action === 'create') {
-            // Get current user from Authorization header
-            list($currentUserId, $isSuperAdmin, $currentUserData) = authenticateUser($pdo);
+            // Get current user info from verified auth
+            list($currentUserId, $isSuperAdmin) = getCurrentUserInfo();
             
-            file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] Create user request\n", FILE_APPEND);
-            
-            if (!$currentUserId || !$currentUserData) {
-                file_put_contents('users_debug.log', "[" . date('Y-m-d H:i:s') . "] No current user ID or data - sending 401\n", FILE_APPEND);
+            if (!$currentUserId) {
                 sendError('Authentication required', 401);
             }
             
@@ -193,9 +157,14 @@ try {
                 }
             }
             
-            // For regular users, require at least one outlet
-            if ($role === 'user' && empty($validOutletIds)) {
-                sendError('Regular users must have at least one outlet assigned', 400);
+            // For regular users, require exactly one outlet
+            if ($role === 'user') {
+                if (empty($validOutletIds)) {
+                    sendError('Regular users must have exactly one outlet assigned', 400);
+                }
+                if (count($validOutletIds) > 1) {
+                    sendError('Regular users can only have one outlet assigned', 400);
+                }
             }
             
             $userId = generateId('u-');
@@ -237,10 +206,10 @@ try {
             ], 201);
             
         } elseif ($action === 'update') {
-            // Get current user from Authorization header
-            list($currentUserId, $isSuperAdmin, $currentUserData) = authenticateUser($pdo);
+            // Get current user info from verified auth
+            list($currentUserId, $isSuperAdmin) = getCurrentUserInfo();
             
-            if (!$currentUserId || !$currentUserData) {
+            if (!$currentUserId) {
                 sendError('Authentication required', 401);
             }
             
@@ -301,9 +270,14 @@ try {
                 // Get the role to check (use new role if provided, otherwise use current)
                 $checkRole = !empty($data['role']) ? $data['role'] : $userToUpdate['role'];
                 
-                // For regular users, require at least one outlet
-                if ($checkRole === 'user' && empty($validOutletIds)) {
-                    sendError('Regular users must have at least one outlet assigned', 400);
+                // For regular users, require exactly one outlet
+                if ($checkRole === 'user') {
+                    if (empty($validOutletIds)) {
+                        sendError('Regular users must have exactly one outlet assigned', 400);
+                    }
+                    if (count($validOutletIds) > 1) {
+                        sendError('Regular users can only have one outlet assigned', 400);
+                    }
                 }
                 
                 // Delete existing outlet assignments
@@ -389,10 +363,10 @@ try {
             sendJSON($updatedUser);
             
         } elseif ($action === 'delete') {
-            // Get current user from Authorization header
-            list($currentUserId, $isSuperAdmin, $currentUserData) = authenticateUser($pdo);
+            // Get current user info from verified auth
+            list($currentUserId, $isSuperAdmin) = getCurrentUserInfo();
             
-            if (!$currentUserId || !$currentUserData) {
+            if (!$currentUserId) {
                 sendError('Authentication required', 401);
             }
             

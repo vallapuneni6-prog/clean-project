@@ -17,7 +17,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
     const [customerSittingsPackages, setCustomerSittingsPackages] = useState<CustomerSittingsPackage[]>([]);
     const [outlets, setOutlets] = useState<Outlet[]>([]);
     const [loading, setLoading] = useState(true);
-    const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'customerName' | 'remainingValue' | 'outlet'>('latest');
+    const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'customerName' | 'remainingValue' | 'outlet' | 'month'>('latest');
     const [selectedOutletFilter, setSelectedOutletFilter] = useState<string>('all');
     const [activeTab, setActiveTab] = useState<'value' | 'sittings'>('value');
 
@@ -52,7 +52,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
     const loadData = async () => {
         try {
             setLoading(true);
-            
+
             // Determine outlet ID for sittings packages filter
             let outletId = '';
             if (currentUser?.role === 'admin' && !isSuperAdmin && adminOutletIds.length > 0) {
@@ -60,17 +60,21 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             } else if (currentUser?.outletId) {
                 outletId = currentUser.outletId;
             }
-            
-            const sittingsPackagesUrl = outletId 
+
+            const sittingsPackagesUrl = outletId
                 ? `/api/sittings-packages?type=customer_packages&outletId=${outletId}`
                 : '/api/sittings-packages?type=customer_packages';
-            
+
+            const headers = {
+                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+            };
+
             const [templatesRes, packagesRes, outletsRes, sittingsTemplatesRes, sittingsPackagesRes] = await Promise.all([
-                fetch('/api/packages?type=templates'),
-                fetch('/api/packages?type=customer_packages'),
-                fetch('/api/outlets'),
-                fetch('/api/sittings-packages?type=templates'),
-                fetch(sittingsPackagesUrl)
+                fetch('/api/packages?type=templates', { headers }),
+                fetch('/api/packages?type=customer_packages', { headers }),
+                fetch('/api/outlets', { headers }),
+                fetch('/api/sittings-packages?type=templates', { headers }),
+                fetch(sittingsPackagesUrl, { headers })
             ]);
 
             if (templatesRes.ok) {
@@ -190,6 +194,14 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                 return filtered.sort((a, b) => b.remainingServiceValue - a.remainingServiceValue);
             case 'outlet':
                 return filtered.sort((a, b) => getOutletName(a.outletId).localeCompare(getOutletName(b.outletId)));
+            case 'month':
+                return filtered.sort((a, b) => {
+                    const aDate = new Date(a.assignedDate);
+                    const bDate = new Date(b.assignedDate);
+                    const aMonth = aDate.getFullYear() * 12 + aDate.getMonth();
+                    const bMonth = bDate.getFullYear() * 12 + bDate.getMonth();
+                    return bMonth - aMonth; // Latest months first
+                });
             default:
                 return filtered;
         }
@@ -406,91 +418,97 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
 
             {/* Header */}
             <div className="flex justify-between items-center">
-                <h1 className="text-4xl font-bold text-gray-900">Manage Packages</h1>
-                <div className="flex gap-2">
-                    {activeTab === 'value' && (
-                        <button
-                            onClick={() => setShowTemplateModal(true)}
-                            className="bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg transition-all"
-                        >
-                            + New Value Package
-                        </button>
-                    )}
-                    {activeTab === 'sittings' && (
-                        <button
-                            onClick={() => setShowSittingsModal(true)}
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg transition-all"
-                        >
-                            + New Sittings Package
-                        </button>
-                    )}
-                </div>
+                <h1 className="text-4xl font-bold text-gray-900">{isSuperAdmin ? 'All Packages' : 'Manage Packages'}</h1>
+                {!isSuperAdmin && (
+                    <div className="flex gap-2">
+                        {activeTab === 'value' && (
+                            <button
+                                onClick={() => setShowTemplateModal(true)}
+                                className="bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg transition-all"
+                            >
+                                + New Value Package
+                            </button>
+                        )}
+                        {activeTab === 'sittings' && (
+                            <button
+                                onClick={() => setShowSittingsModal(true)}
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg transition-all"
+                            >
+                                + New Sittings Package
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Package Type Tabs */}
-            <div className="flex gap-4">
-                <button
-                    onClick={() => setActiveTab('value')}
-                    className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'value'
+            {!isSuperAdmin && (
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => setActiveTab('value')}
+                        className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'value'
                             ? 'bg-purple-500 text-white shadow-lg'
                             : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                        }`}
-                >
-                    Value Packages (Pay & Get)
-                </button>
-                <button
-                    onClick={() => setActiveTab('sittings')}
-                    className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'sittings'
+                            }`}
+                    >
+                        Value Packages (Pay & Get)
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('sittings')}
+                        className={`px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'sittings'
                             ? 'bg-blue-500 text-white shadow-lg'
                             : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                        }`}
-                >
-                    Sittings Packages (3+1, 6+2...)
-                </button>
-            </div>
+                            }`}
+                    >
+                        Sittings Packages (3+1, 6+2...)
+                    </button>
+                </div>
+            )}
 
             {/* VALUE PACKAGES TAB */}
-            {activeTab === 'value' && (
+            {(activeTab === 'value' || isSuperAdmin) && (
                 <>
-                    {/* Available Value Templates Section */}
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Value Package Templates</h2>
-                        {templates.length > 0 ? (
-                            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Template Name</th>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Package Value (Pay)</th>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Service Value (Get)</th>
-                                            <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {templates.map(template => (
-                                            <tr key={template.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 text-sm font-semibold text-gray-900">{template.name}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">₹{(template.packageValue || 0).toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">₹{(template.serviceValue || 0).toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        onClick={() => handleDeleteTemplate(template.id)}
-                                                        className="text-red-600 hover:text-red-800 font-semibold text-sm hover:bg-red-50 px-3 py-1 rounded transition-colors"
-                                                    >
-                                                        🗑 Delete
-                                                    </button>
-                                                </td>
+                    {/* Available Value Templates Section - Hidden for Super Admin */}
+                    {!isSuperAdmin && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Value Package Templates</h2>
+                            {templates.length > 0 ? (
+                                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Template Name</th>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Package Value (Pay)</th>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Service Value (Get)</th>
+                                                <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Action</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="text-center py-10 bg-white rounded-lg border border-gray-200 text-gray-500">
-                                No templates found. Create one to get started.
-                            </div>
-                        )}
-                    </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {templates.map(template => (
+                                                <tr key={template.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{template.name}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">₹{(template.packageValue || 0).toLocaleString()}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">₹{(template.serviceValue || 0).toLocaleString()}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <button
+                                                            onClick={() => handleDeleteTemplate(template.id)}
+                                                            className="text-red-600 hover:text-red-800 font-semibold text-sm hover:bg-red-50 px-3 py-1 rounded transition-colors"
+                                                        >
+                                                            🗑 Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 bg-white rounded-lg border border-gray-200 text-gray-500">
+                                    No templates found. Create one to get started.
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* All Customer Value Packages */}
                     <div>
@@ -515,11 +533,12 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                                     <label className="text-sm font-medium text-gray-700">Sort by:</label>
                                     <select
                                         value={sortBy}
-                                        onChange={(e) => setSortBy(e.target.value as 'latest' | 'oldest' | 'customerName' | 'remainingValue' | 'outlet')}
+                                        onChange={(e) => setSortBy(e.target.value as 'latest' | 'oldest' | 'customerName' | 'remainingValue' | 'outlet' | 'month')}
                                         className="px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                                     >
                                         <option value="latest">Latest First</option>
                                         <option value="oldest">Oldest First</option>
+                                        <option value="month">By Month</option>
                                         <option value="customerName">Customer Name (A-Z)</option>
                                         <option value="remainingValue">Remaining Value (High to Low)</option>
                                         <option value="outlet">Outlet Name (A-Z)</option>
@@ -575,53 +594,88 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             )}
 
             {/* SITTINGS PACKAGES TAB */}
-            {activeTab === 'sittings' && (
+            {(activeTab === 'sittings' || isSuperAdmin) && (
                 <>
-                    {/* Available Sittings Templates Section */}
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Sittings Package Templates</h2>
-                        {sittingsTemplates.length > 0 ? (
-                            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Package Name</th>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Paid Sittings</th>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Free Sittings</th>
-                                            <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Total</th>
-                                            <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {sittingsTemplates.map(template => (
-                                            <tr key={template.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 text-sm font-semibold text-gray-900">{template.name}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">{template.paidSittings}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">{template.freeSittings}</td>
-                                                <td className="px-6 py-4 text-sm font-semibold text-blue-600">{template.paidSittings + template.freeSittings}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        onClick={() => handleDeleteSittingsTemplate(template.id)}
-                                                        className="text-red-600 hover:text-red-800 font-semibold text-sm hover:bg-red-50 px-3 py-1 rounded transition-colors"
-                                                    >
-                                                        🗑 Delete
-                                                    </button>
-                                                </td>
+                    {/* Available Sittings Templates Section - Hidden for Super Admin */}
+                    {!isSuperAdmin && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Sittings Package Templates</h2>
+                            {sittingsTemplates.length > 0 ? (
+                                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Package Name</th>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Paid Sittings</th>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Free Sittings</th>
+                                                <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Total</th>
+                                                <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Action</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="text-center py-10 bg-white rounded-lg border border-gray-200 text-gray-500">
-                                No sittings templates found. Create one to get started.
-                            </div>
-                        )}
-                    </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {sittingsTemplates.map(template => (
+                                                <tr key={template.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{template.name}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">{template.paidSittings}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">{template.freeSittings}</td>
+                                                    <td className="px-6 py-4 text-sm font-semibold text-blue-600">{template.paidSittings + template.freeSittings}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <button
+                                                            onClick={() => handleDeleteSittingsTemplate(template.id)}
+                                                            className="text-red-600 hover:text-red-800 font-semibold text-sm hover:bg-red-50 px-3 py-1 rounded transition-colors"
+                                                        >
+                                                            🗑 Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 bg-white rounded-lg border border-gray-200 text-gray-500">
+                                    No sittings templates found. Create one to get started.
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* All Customer Sittings Packages */}
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">All Customer Sittings Packages</h2>
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                            <h2 className="text-2xl font-bold text-gray-900">All Customer Sittings Packages</h2>
+                            {isSuperAdmin && (
+                                <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700">Outlet:</label>
+                                        <select
+                                            value={selectedOutletFilter}
+                                            onChange={(e) => setSelectedOutletFilter(e.target.value)}
+                                            className="px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="all">All Outlets</option>
+                                            {outlets.map(outlet => (
+                                                <option key={outlet.id} value={outlet.id}>{outlet.name} ({outlet.code})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700">Sort by:</label>
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value as 'latest' | 'oldest' | 'customerName' | 'remainingValue' | 'outlet' | 'month')}
+                                            className="px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="latest">Latest First</option>
+                                            <option value="oldest">Oldest First</option>
+                                            <option value="month">By Month</option>
+                                            <option value="customerName">Customer Name (A-Z)</option>
+                                            <option value="outlet">Outlet Name (A-Z)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         {customerSittingsPackages.length > 0 ? (
                             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 <table className="w-full">
@@ -630,6 +684,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                                             <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Customer Name</th>
                                             <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Mobile</th>
                                             <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Package</th>
+                                            {isSuperAdmin && <th className="px-6 py-3 text-left text-sm font-bold text-gray-900">Outlet</th>}
                                             <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Total</th>
                                             <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Used</th>
                                             <th className="px-6 py-3 text-center text-sm font-bold text-gray-900">Remaining</th>
@@ -638,25 +693,48 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                        {customerSittingsPackages.map(pkg => (
-                                            <tr key={pkg.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 text-sm text-gray-900">{pkg.customerName}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">{sittingsTemplates.find(t => t.id === pkg.sittingsPackageId)?.name || 'N/A'}</td>
-                                                <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900">{pkg.totalSittings}</td>
-                                                <td className="px-6 py-4 text-center text-sm text-orange-600 font-semibold">{pkg.usedSittings}</td>
-                                                <td className="px-6 py-4 text-center text-sm font-bold text-green-600">{pkg.remainingSittings}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600">{new Date(pkg.assignedDate).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        onClick={() => handleViewSittingsHistory(pkg)}
-                                                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-3 rounded text-sm transition-colors"
-                                                    >
-                                                        History
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {customerSittingsPackages
+                                            .filter(pkg => isSuperAdmin ? (selectedOutletFilter === 'all' || pkg.outletId === selectedOutletFilter) : true)
+                                            .sort((a, b) => {
+                                                switch (sortBy) {
+                                                    case 'latest':
+                                                        return new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime();
+                                                    case 'oldest':
+                                                        return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
+                                                    case 'customerName':
+                                                        return a.customerName.localeCompare(b.customerName);
+                                                    case 'outlet':
+                                                        return getOutletName(a.outletId).localeCompare(getOutletName(b.outletId));
+                                                    case 'month':
+                                                        const aDate = new Date(a.assignedDate);
+                                                        const bDate = new Date(b.assignedDate);
+                                                        const aMonth = aDate.getFullYear() * 12 + aDate.getMonth();
+                                                        const bMonth = bDate.getFullYear() * 12 + bDate.getMonth();
+                                                        return bMonth - aMonth;
+                                                    default:
+                                                        return 0;
+                                                }
+                                            })
+                                            .map(pkg => (
+                                                <tr key={pkg.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-4 text-sm text-gray-900">{pkg.customerName}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">{sittingsTemplates.find(t => t.id === pkg.sittingsPackageId)?.name || 'N/A'}</td>
+                                                    {isSuperAdmin && <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(pkg.outletId)}</td>}
+                                                    <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900">{pkg.totalSittings}</td>
+                                                    <td className="px-6 py-4 text-center text-sm text-orange-600 font-semibold">{pkg.usedSittings}</td>
+                                                    <td className="px-6 py-4 text-center text-sm font-bold text-green-600">{pkg.remainingSittings}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-600">{new Date(pkg.assignedDate).toLocaleDateString()}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <button
+                                                            onClick={() => handleViewSittingsHistory(pkg)}
+                                                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-3 rounded text-sm transition-colors"
+                                                        >
+                                                            History
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
                                     </tbody>
                                 </table>
                             </div>

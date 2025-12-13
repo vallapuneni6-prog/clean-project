@@ -78,13 +78,13 @@ try {
         sendError('User not found', 401);
     }
     
-    // Get user's assigned outlets
+    // Get user's assigned outlets in order of assignment
     $outletsStmt = $pdo->prepare("
         SELECT o.id, o.name, o.code, o.location, o.address, o.gstin, o.phone
         FROM outlets o
         INNER JOIN user_outlets uo ON o.id = uo.outlet_id
         WHERE uo.user_id = :userId
-        ORDER BY o.name ASC
+        ORDER BY uo.created_at ASC, o.name ASC
     ");
     $outletsStmt->execute(['userId' => $user['id']]);
     $outlets = $outletsStmt->fetchAll(PDO::FETCH_ASSOC);

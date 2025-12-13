@@ -42,14 +42,9 @@ define('DB_PORT', $_ENV['DB_PORT'] ?? 3306);
 // Create database connection
 function getDBConnection() {
     try {
-        file_put_contents('db_debug.log', "[" . date('Y-m-d H:i:s') . "] getDBConnection() called\n", FILE_APPEND);
-        
         // Use MySQL as primary database
         if (defined('DB_TYPE') && DB_TYPE === 'mysql') {
             $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-            
-            file_put_contents('db_debug.log', "[" . date('Y-m-d H:i:s') . "] Connecting to MySQL with DSN: " . $dsn . "\n", FILE_APPEND);
-            file_put_contents('db_debug.log', "[" . date('Y-m-d H:i:s') . "] DB_HOST: " . DB_HOST . ", DB_NAME: " . DB_NAME . ", DB_USER: " . DB_USER . "\n", FILE_APPEND);
             
             $options = [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -58,7 +53,6 @@ function getDBConnection() {
             ];
             
             $conn = new PDO($dsn, DB_USER, DB_PASS, $options);
-            file_put_contents('db_debug.log', "[" . date('Y-m-d H:i:s') . "] MySQL connection successful\n", FILE_APPEND);
             return $conn;
         }
         
