@@ -185,20 +185,32 @@ try {
             $gstAmount = ($subtotal * $gstPercentage) / 100;
             $totalAmount = $subtotal + $gstAmount;
             
-            // Generate invoice number: INV-{YEAR}-{NUMBER}
-            $year = date('Y');
-            $stmt = $pdo->prepare("SELECT invoice_number FROM invoices WHERE invoice_number LIKE :pattern ORDER BY invoice_number DESC LIMIT 1");
-            $stmt->execute(['pattern' => "INV-{$year}-%"]);
+            // Generate invoice number: {OUTLETCODE}-{INCREMENTAL}
+            // Get outlet code
+            $outletStmt = $pdo->prepare("SELECT code FROM outlets WHERE id = :outletId");
+            $outletStmt->execute(['outletId' => $outletId]);
+            $outlet = $outletStmt->fetch();
+            
+            if (!$outlet) {
+                sendError('Outlet not found', 404);
+            }
+            
+            $outletCode = $outlet['code'];
+            
+            // Query for last invoice for this outlet
+            $stmt = $pdo->prepare("SELECT invoice_number FROM invoices WHERE outlet_id = :outletId ORDER BY created_at DESC LIMIT 1");
+            $stmt->execute(['outletId' => $outletId]);
             $lastInvoice = $stmt->fetch();
             
             if ($lastInvoice) {
-                $lastNumber = (int)substr($lastInvoice['invoice_number'], -6);
+                // Extract the numeric part after the outlet code
+                $lastNumber = (int)substr($lastInvoice['invoice_number'], strlen($outletCode) + 1);
                 $newNumber = $lastNumber + 1;
             } else {
                 $newNumber = 1;
             }
             
-            $invoiceNumber = sprintf("INV-%s-%06d", $year, $newNumber);
+            $invoiceNumber = sprintf("%s-%06d", $outletCode, $newNumber);
             $invoiceId = generateId('inv-');
             
             // Begin transaction

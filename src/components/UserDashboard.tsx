@@ -202,8 +202,61 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     }, [redeemSearchQuerySittings, customerSittingsPackages]);
 
     useEffect(() => {
+        // Reload data when redeem sittings form is opened
+        if (showRedeemSittingsForm) {
+            console.log('Redeem sittings form opened, reloading data...');
+            loadData();
+        }
+    }, [showRedeemSittingsForm]);
+
+    useEffect(() => {
+        // Update filtered packages when redeem form opens to ensure they're visible
+        if (showRedeemSittingsForm && redeemSearchQuerySittings === '') {
+            setFilteredCustomerSittingsPackages(customerSittingsPackages);
+            console.log('Updated filtered sittings packages on form open, count:', customerSittingsPackages.length);
+        }
+    }, [showRedeemSittingsForm, customerSittingsPackages]);
+
+    useEffect(() => {
+        // Reload data when assign sittings form is opened to ensure latest templates
+        if (showAssignSittingsForm) {
+            console.log('Assign sittings form opened, reloading data...');
+            loadData();
+        }
+    }, [showAssignSittingsForm]);
+
+    useEffect(() => {
+        // Reload data when switching to sittings packages tab (assign tab specifically)
+        if (activePackageType === 'sittings' && activeTab === 'assign') {
+            console.log('Switched to sittings assign tab, loading data...');
+            loadData();
+        }
+    }, [activePackageType, activeTab]);
+
+    useEffect(() => {
         console.log('Sittings templates updated:', sittingsTemplates);
     }, [sittingsTemplates]);
+
+    // Auto-refresh templates periodically to catch any created in admin panel
+    useEffect(() => {
+        // Handle custom event when templates are updated
+        const handleTemplatesUpdated = (event: any) => {
+            console.log('Templates updated event received:', event.detail);
+            loadData();
+        };
+
+        window.addEventListener('templatesUpdated', handleTemplatesUpdated);
+
+        // Also refresh periodically as fallback
+        const interval = setInterval(() => {
+            loadData();
+        }, 30000); // Refresh every 30 seconds as fallback
+
+        return () => {
+            window.removeEventListener('templatesUpdated', handleTemplatesUpdated);
+            clearInterval(interval);
+        };
+    }, []);
 
     const loadData = async () => {
         try {
@@ -213,13 +266,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 ? `/api/sittings-packages?type=customer_packages&outletId=${userOutletId}`
                 : '/api/sittings-packages?type=customer_packages';
 
+            const authToken = localStorage.getItem('authToken') || '';
+            const headers = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+
             const [packagesRes, customerPackagesRes, staffRes, servicesRes, sittingsTemplatesRes, customerSittingsRes] = await Promise.all([
-                fetch('/api/packages?type=templates'),
-                fetch('/api/packages?type=customer_packages'),
-                fetch(staffUrl),
-                fetch('/api/services?action=list'),
-                fetch('/api/sittings-packages?type=templates'),
-                fetch(sittingsPackagesUrl)
+                fetch('/api/packages?type=templates', { headers }),
+                fetch('/api/packages?type=customer_packages', { headers }),
+                fetch(staffUrl, { headers }),
+                fetch('/api/services?action=list', { headers }),
+                fetch('/api/sittings-packages?type=templates', { headers }),
+                fetch(sittingsPackagesUrl, { headers })
             ]);
 
             if (packagesRes.ok) {
@@ -2161,15 +2217,64 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                             <>
                                 {/* Assign New Sittings Package Button - At Top */}
                                 {!showAssignSittingsForm ? (
-                                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center mb-8">
-                                        <h2 className="text-2xl font-bold mb-6 text-gray-900">Assign New Sittings Package</h2>
-                                        <button
-                                            onClick={() => setShowAssignSittingsForm(true)}
-                                            className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
-                                        >
-                                            Assign New Sittings Package
-                                        </button>
-                                    </div>
+                                    <>
+                                        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center mb-8">
+                                            <h2 className="text-2xl font-bold mb-6 text-gray-900">Assign New Sittings Package</h2>
+                                            <button
+                                                onClick={() => setShowAssignSittingsForm(true)}
+                                                className="bg-gradient-to-r from-brand-gradient-from to-brand-gradient-to text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-opacity"
+                                            >
+                                                Assign New Sittings Package
+                                            </button>
+                                        </div>
+
+                                        {/* Customer Sittings Packages Table */}
+                                        <div className="bg-white rounded-lg border border-gray-200 p-8">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4">All Customer Sittings Packages</h3>
+                                            {customerSittingsPackages.length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">
+                                                    No customer sittings packages assigned yet
+                                                </p>
+                                            ) : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse">
+                                                        <thead>
+                                                            <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Customer Name</th>
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Mobile</th>
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Package</th>
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Service</th>
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Sittings</th>
+                                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Assigned Date</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {customerSittingsPackages.map((pkg) => {
+                                                                const template = sittingsTemplates.find(t => t.id === pkg.sittingsPackageId);
+                                                                return (
+                                                                    <tr key={pkg.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{pkg.customerName}</td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-600">{pkg.customerMobile}</td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-900">{template?.name || 'N/A'}</td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-900">{pkg.serviceName || 'N/A'}</td>
+                                                                        <td className="px-4 py-4 text-sm">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="font-semibold text-gray-900">{pkg.totalSittings}</span>
+                                                                                <span className="text-gray-500">(<span className="text-green-600">{pkg.remainingSittings}</span> remaining)</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-600">
+                                                                            {new Date(pkg.assignedDate).toLocaleDateString('en-GB')}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="bg-white rounded-lg border border-gray-200 p-8">
                                         <div className="flex justify-between items-center mb-6">
@@ -2567,7 +2672,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                                             <div className="flex justify-between items-center mb-6">
                                                 <h2 className="text-2xl font-bold text-gray-900">Redeem from Sittings Package</h2>
                                                 <button
-                                                    onClick={() => setShowRedeemSittingsForm(false)}
+                                                    onClick={() => {
+                                                        setShowRedeemSittingsForm(false);
+                                                        setRedeemSearchQuerySittings('');
+                                                    }}
                                                     className="text-gray-500 hover:text-gray-700 text-2xl"
                                                 >
                                                     ✕

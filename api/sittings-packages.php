@@ -27,6 +27,7 @@ try {
                     sendJSON([]);
                     exit;
                 }
+                error_log("Error loading sittings package templates: " . $e->getMessage());
                 throw $e;
             }
             
@@ -49,6 +50,8 @@ try {
             // Get customer sittings packages (optionally filtered by outlet)
             try {
                 $outletId = $_GET['outletId'] ?? null;
+                error_log("=== CUSTOMER SITTINGS PACKAGES QUERY ===");
+                error_log("Outlet ID requested: " . ($outletId ?? 'null/no filter'));
                 
                 if ($outletId) {
                     // Filter by outlet
@@ -74,14 +77,23 @@ try {
                     error_log("Loaded all customer sittings packages, count: " . count($packages));
                 }
             } catch (PDOException $e) {
+                error_log("=== CUSTOMER SITTINGS PACKAGES QUERY ERROR ===");
+                error_log("Outlet ID: " . ($outletId ?? 'NULL'));
+                error_log("Error message: " . $e->getMessage());
+                error_log("Error code: " . $e->getCode());
+                
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
                     // Tables don't exist yet, return empty array
                     error_log("Customer sittings packages table doesn't exist yet");
                     sendJSON([]);
                     exit;
                 }
-                error_log("Error loading customer sittings packages: " . $e->getMessage());
-                throw $e;
+                
+                // Log but return empty array to prevent 500 errors
+                // This helps debugging without breaking the UI
+                error_log("Returning empty array due to query error");
+                sendJSON([]);
+                exit;
             }
             
             $packages = array_map(function($p) {

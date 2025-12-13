@@ -64,13 +64,24 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
                 
                 <table style="width: 100%; margin: 8px 0; border-collapse: collapse;">
                     <tr>
-                        <td style="padding: 4px 2px 8px 2px; text-align: left; font-weight: bold; border-bottom: 1px solid #000;">Package</td>
+                        <td style="padding: 4px 2px 8px 2px; text-align: left; font-weight: bold; border-bottom: 1px solid #000;">Service / Package</td>
                         <td style="padding: 4px 2px 8px 2px; text-align: right; font-weight: bold; border-bottom: 1px solid #000;">Value</td>
                     </tr>
                     <tr>
                         <td style="padding: 4px 2px; text-align: left; font-size: 11px;">${template.name}</td>
                         <td style="padding: 4px 2px; text-align: right; font-size: 11px;">₹${template.packageValue.toFixed(2)}</td>
                     </tr>
+                    ${initialServices && initialServices.length > 0 ? `
+                    <tr>
+                        <td colspan="2" style="padding: 4px 2px; border-top: 1px solid #ddd; font-size: 10px; font-weight: bold;">Services Used:</td>
+                    </tr>
+                    ${initialServices.map(service => `
+                    <tr>
+                        <td style="padding: 2px 2px; text-align: left; font-size: 10px;">  • ${service.serviceName}</td>
+                        <td style="padding: 2px 2px; text-align: right; font-size: 10px;">₹${service.serviceValue.toFixed(2)}</td>
+                    </tr>
+                    `).join('')}
+                    ` : ''}
                 </table>
                 
                 <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
@@ -199,15 +210,16 @@ export const generateBrandedSittingsInvoiceImage = async (
                         <td style="text-align: left; padding: 4px 0;">Service:</td>
                         <td style="text-align: right; padding: 4px 0;">${customerPackage.serviceName || 'N/A'}</td>
                     </tr>
-                    ${customerPackage.usedSittings > 0 ? `<tr>
-                        <td style="text-align: left; padding: 4px 0;">Sitting #${sittingNumber}:</td>
-                        <td style="text-align: right; padding: 4px 0;">Redeemed</td>
-                    </tr>` : ''}                    <tr>
+                    ${customerPackage.serviceValue ? `<tr>
+                        <td style="text-align: left; padding: 4px 0;">Service Value:</td>
+                        <td style="text-align: right; padding: 4px 0;">₹${customerPackage.serviceValue.toFixed(2)}</td>
+                    </tr>` : ''}
+                    <tr>
                         <td style="text-align: left; padding: 4px 0;">Total Sittings:</td>
                         <td style="text-align: right; padding: 4px 0;">${customerPackage.totalSittings}</td>
                     </tr>
                     ${customerPackage.usedSittings > 0 ? `<tr>
-                        <td style="text-align: left; padding: 4px 0;">Used:</td>
+                        <td style="text-align: left; padding: 4px 0;">Sitting #${sittingNumber} (Redeemed):</td>
                         <td style="text-align: right; padding: 4px 0;">- ${customerPackage.usedSittings}</td>
                     </tr>` : ''}
                     <tr style="border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 14px;">
