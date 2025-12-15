@@ -1,0 +1,199 @@
+# ============================================================================
+# Nginx Configuration Example - Salon Management System
+# ============================================================================
+# Location: /etc/nginx/sites-available/ansira or similar
+# Enable with: ln -s /etc/nginx/sites-available/ansira /etc/nginx/sites-enabled/
+# Test: nginx -t
+# Reload: systemctl reload nginx
+# ============================================================================
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name yourdomain.com www.yourdomain.com;
+    
+    # Redirect all HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS Server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name yourdomain.com www.yourdomain.com;
+
+    # ========================================================================
+    # SSL/TLS Configuration
+    # ========================================================================
+    ssl_certificate /etc/ssl/certs/yourdomain.com.crt;
+    ssl_certificate_key /etc/ssl/private/yourdomain.com.key;
+    
+    # Strong SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # ========================================================================
+    # Logging
+    # ========================================================================
+    access_log /var/log/nginx/ansira_access.log combined;
+    error_log /var/log/nginx/ansira_error.log warn;
+
+    # ========================================================================
+    # Root Directory
+    # ========================================================================
+    root /var/www/ansira;
+    index index.html index.php;
+
+    # ========================================================================
+    # Security Headers
+    # ========================================================================
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # ========================================================================
+    # Frontend - React/Vue Application
+    # ========================================================================
+    location / {
+        # Try file first, then directory, then fallback to index.html
+        try_files $uri $uri/ /index.html;
+        
+        # Cache HTML files (short TTL)
+        expires 5m;
+        add_header Cache-Control "public, max-age=300";
+    }
+
+    # ========================================================================
+    # Static Assets - Cache aggressively
+    # ========================================================================
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
+    # ========================================================================
+    # API Backend - PHP
+    # ========================================================================
+    location ~ ^/api/ {
+        # Remove /api prefix and pass to index.php
+        rewrite ^/api/(.*)$ /index.php/$1 last;
+    }
+
+    # ========================================================================
+    # PHP Handler
+    # ========================================================================
+    location ~ \.php$ {
+        # Security: Deny direct access to .php files
+        if ($request_uri ~ "^/api/") {
+            # Allow PHP in /api directory
+        } else {
+            # Deny for other locations
+            deny all;
+        }
+
+        fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;  # Adjust PHP version
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        
+        # Include standard FastCGI parameters
+        include fastcgi_params;
+        
+        # Performance settings
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+        
+        # Timeouts
+        fastcgi_read_timeout 300s;
+        fastcgi_send_timeout 300s;
+    }
+
+    # ========================================================================
+    # Deny Access to Sensitive Files
+    # ========================================================================
+    location ~ /\. {
+        deny all;
+    }
+
+    location ~ ~$ {
+        deny all;
+    }
+
+    location ~ /(\.env|\.git|composer.lock|package-lock.json) {
+        deny all;
+    }
+
+    # ========================================================================
+    # Gzip Compression
+    # ========================================================================
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1000;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/xml text/javascript 
+               application/x-javascript application/xml+rss 
+               application/json application/javascript;
+
+    # ========================================================================
+    # Client Upload Size Limit
+    # ========================================================================
+    client_max_body_size 10M;
+
+    # ========================================================================
+    # FastCGI Cache (Optional Performance)
+    # ========================================================================
+    # Uncomment to enable caching
+    # location ~ \.php$ {
+    #     # ... PHP handler config above ...
+    #     fastcgi_cache PHPCACHE;
+    #     fastcgi_cache_valid 200 10m;
+    #     add_header X-Cache $upstream_cache_status;
+    # }
+}
+
+# ========================================================================
+# FastCGI Cache Definition (Optional)
+# ========================================================================
+# Add this to /etc/nginx/nginx.conf in the http block:
+#
+# fastcgi_cache_path /var/cache/nginx levels=1:2 keys_zone=PHPCACHE:10m 
+#                    max_size=1g inactive=60m use_temp_path=off;
+# fastcgi_cache_key "$scheme$request_method$host$request_uri";
+# ========================================================================
+
+# ========================================================================
+# INSTALLATION INSTRUCTIONS
+# ========================================================================
+# 1. Save this file as: /etc/nginx/sites-available/ansira
+# 2. Replace yourdomain.com with your domain
+# 3. Update paths to match your installation
+# 4. Update PHP socket path if needed (php7.4 vs php8.0, etc)
+# 5. Create symlink: ln -s /etc/nginx/sites-available/ansira /etc/nginx/sites-enabled/
+# 6. Test config: nginx -t
+# 7. Reload Nginx: systemctl reload nginx
+# 8. Check status: systemctl status nginx
+
+# ========================================================================
+# COMMON PATHS TO UPDATE
+# ========================================================================
+# SSL Certificate: /etc/ssl/certs/yourdomain.com.crt
+# SSL Key: /etc/ssl/private/yourdomain.com.key
+# Web Root: /var/www/ansira (adjust to your path)
+# Access Log: /var/log/nginx/ansira_access.log
+# Error Log: /var/log/nginx/ansira_error.log
+# PHP-FPM Socket: /var/run/php/php7.4-fpm.sock (check your PHP version)
+
+# ========================================================================
+# VERIFY INSTALLATION
+# ========================================================================
+# 1. Test domain: https://yourdomain.com
+# 2. Check API: curl -X GET https://yourdomain.com/api/
+# 3. Review logs: tail -f /var/log/nginx/ansira_error.log
+# ========================================================================

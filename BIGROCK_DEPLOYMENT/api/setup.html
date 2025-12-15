@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Database - Voucher Management System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #1F2937;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #6B7280;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .info {
+            background: #F3F4F6;
+            border-left: 4px solid #FF6B35;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            font-size: 14px;
+            color: #374151;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-direction: column;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 107, 53, 0.3);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #ECFDF5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
+            display: block;
+        }
+        
+        .status.error {
+            background: #FEF2F2;
+            color: #7F1D1D;
+            border: 1px solid #FECACA;
+            display: block;
+        }
+        
+        .status.loading {
+            background: #FFFBEB;
+            color: #78350F;
+            border: 1px solid #FCD34D;
+            display: block;
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #78350F;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .success-icon {
+            display: inline-block;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ Setup Required</h1>
+        <p class="subtitle">Initialize your database tables</p>
+        
+        <div class="info">
+            <strong>Before you continue:</strong> The system needs to create database tables for invoices, vouchers, outlets, and other features. Click the button below to set up your database.
+            <br><br>
+            <small>Make sure you're accessing this from: <code style="background: #E5E7EB; padding: 2px 4px; border-radius: 3px;">http://localhost/clean-project/api/setup.html</code></small>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-primary" onclick="setupDatabase()">
+                ✓ Setup Database
+            </button>
+            <button style="background: #6B7280; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;" onclick="testDatabase()">
+                🔍 Test Connection
+            </button>
+        </div>
+        
+        <div id="status" class="status"></div>
+    </div>
+    
+    <script>
+        async function testDatabase() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                statusDiv.className = 'status loading';
+                statusDiv.innerHTML = '<span class="loader"></span>Testing database connection...';
+                
+                const response = await fetch('./setup-debug.php');
+                const data = await response.json();
+                
+                if (data.status === 'ready') {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `<span class="success-icon">✓</span>${data.message}<br><br>You can <a href="../index.html" style="color: #065F46; text-decoration: underline;">return to the application</a>.`;
+                } else if (data.status === 'needs_setup') {
+                    statusDiv.className = 'status loading';
+                    statusDiv.innerHTML = `⚠️ ${data.message}<br><br>Click "Setup Database" above to create the tables.`;
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = `<strong>Error:</strong><br>${data.error}`;
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `<strong>Error:</strong><br>${error.message}`;
+            }
+        }
+
+        async function setupDatabase() {
+            const statusDiv = document.getElementById('status');
+            const button = document.querySelector('.btn-primary');
+            
+            try {
+                button.disabled = true;
+                statusDiv.className = 'status loading';
+                statusDiv.innerHTML = '<span class="loader"></span>Setting up database tables...';
+                
+                const response = await fetch('./setup-database.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch {
+                    const text = await response.text();
+                    throw new Error(text || 'Invalid server response');
+                }
+                
+                if (response.ok && data.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `<span class="success-icon">✓</span>Database setup completed successfully!<br><br>Tables created: ${data.tablesCreated}<br><br>You can now <a href="../index.html" style="color: #065F46; text-decoration: underline;">return to the application</a>.`;
+                    button.style.display = 'none';
+                } else {
+                    const errorMsg = data.error || 'Setup failed. Please check server logs.';
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = `<strong>Error:</strong><br>${errorMsg}`;
+                    button.disabled = false;
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                statusDiv.innerHTML = `<strong>Error:</strong><br>${errorMsg}<br><br><small>Make sure you access this from http://localhost/clean-project/api/setup.html</small>`;
+                button.disabled = false;
+                console.error('Setup error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

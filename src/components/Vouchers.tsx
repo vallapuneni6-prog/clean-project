@@ -849,7 +849,7 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
                               {voucher.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(voucher.outletId, voucher.outletName)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(voucher.outletId)}</td>
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{voucher.redemptionBillNo ? `Bill ${voucher.redemptionBillNo}` : '-'}</td>
                         </tr>
                       ))}

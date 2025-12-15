@@ -1,0 +1,301 @@
+{
+    "vouchers": [
+        {
+            "id": "v-1",
+            "recipientName": "John Doe",
+            "recipientMobile": "9876543210",
+            "outletId": "outlet-1",
+            "type": "PARTNER",
+            "status": "ISSUED",
+            "discountPercentage": 20,
+            "issueDate": "2023-01-15",
+            "expiryDate": "2024-01-15",
+            "billNo": "BILL-001"
+        },
+        {
+            "id": "v-2",
+            "recipientName": "Jane Smith",
+            "recipientMobile": "9876543211",
+            "outletId": "outlet-1",
+            "type": "FAMILY_FRIENDS",
+            "status": "REDEEMED",
+            "discountPercentage": 30,
+            "issueDate": "2023-02-20",
+            "expiryDate": "2024-02-20",
+            "redeemedDate": "2023-03-15",
+            "billNo": "BILL-002",
+            "redemptionBillNo": "RBILL-001"
+        }
+    ],
+    "outlets": [
+        {
+            "id": "outlet-1",
+            "name": "Main Branch",
+            "code": "MAIN",
+            "location": "City Center",
+            "address": "123 Main Street, City Center",
+            "gstin": "GSTIN1234567890",
+            "phone": "9876543210"
+        },
+        {
+            "id": "outlet-2",
+            "name": "North Branch",
+            "code": "NORTH",
+            "location": "North District",
+            "address": "456 North Avenue, North District",
+            "gstin": "GSTIN0987654321",
+            "phone": "9876543211"
+        },
+        {
+            "id": "outlet-3",
+            "name": "Test Outlet 1764530171",
+            "code": "TEST761",
+            "location": "Test Location",
+            "address": "123 Test Street",
+            "gstin": "GSTINTEST1234567",
+            "phone": "9876543215"
+        },
+        {
+            "id": "outlet-4",
+            "name": "Madinaguda",
+            "code": "MDG",
+            "location": "Madinaguda",
+            "address": "Hyderabad",
+            "gstin": "SHDJKKA8DJK",
+            "phone": "9874563210"
+        }
+    ],
+    "users": [
+        {
+            "id": "u-admin",
+            "name": "Administrator",
+            "username": "admin",
+            "role": "admin",
+            "isSuperAdmin": true,
+            "outletIds": [
+                "outlet-1",
+                "outlet-2"
+            ]
+        },
+        {
+            "id": "u-2",
+            "name": "Test User 1764530171",
+            "username": "testuser438",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-1"
+            ]
+        },
+        {
+            "id": "u-3",
+            "name": "Test Admin 1764530554",
+            "username": "testadmin932",
+            "role": "admin",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-1",
+                "outlet-2",
+                "outlet-4"
+            ]
+        },
+        {
+            "id": "u-4",
+            "name": "Test User 1764530554",
+            "username": "testuser717",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-1"
+            ]
+        },
+        {
+            "id": "u-6",
+            "name": "Arun Kumar",
+            "username": "arunk",
+            "role": "admin",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-3",
+                "outlet-4"
+            ]
+        },
+        {
+            "id": "u-7",
+            "name": "Anu",
+            "username": "eanu",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-2"
+            ]
+        },
+        {
+            "id": "u-7",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-1"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-8",
+            "username": "arun",
+            "role": "admin",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-1",
+                "outlet-2"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-9",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-10",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-11",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-12",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-13",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "u-admin",
+            "createdByUsername": "admin"
+        },
+        {
+            "id": "u-14",
+            "username": "user1",
+            "role": "user",
+            "isSuperAdmin": false,
+            "outletIds": [
+                "outlet-4"
+            ],
+            "createdBy": "",
+            "createdByUsername": ""
+        }
+    ],
+    "staff": [
+        {
+            "id": "s-1",
+            "name": "John Staff",
+            "outletId": "outlet-1",
+            "phone": "9876543212",
+            "salary": 25000,
+            "joiningDate": "2023-01-01",
+            "target": 50000
+        },
+        {
+            "id": "s-2",
+            "name": "Jane Employee",
+            "outletId": "outlet-2",
+            "phone": "9876543213",
+            "salary": 22000,
+            "joiningDate": "2023-02-01",
+            "target": 45000
+        }
+    ],
+    "invoices": [
+        {
+            "id": "inv-1",
+            "invoiceNumber": "INV-001",
+            "customerId": "c-1",
+            "outletId": "outlet-1",
+            "staffId": "s-1",
+            "subtotal": 1000,
+            "discount": 100,
+            "tax": 180,
+            "total": 1080,
+            "paymentMode": "Cash",
+            "notes": "Sample invoice",
+            "createdAt": "2023-01-15 10:30:00"
+        }
+    ],
+    "customers": [
+        {
+            "id": "c-1",
+            "name": "Sample Customer",
+            "mobile": "9876543214",
+            "outletId": "outlet-1",
+            "email": "customer@example.com",
+            "createdAt": "2023-01-10 09:00:00"
+        }
+    ],
+    "services": [
+        {
+            "id": "svc-1",
+            "name": "Haircut",
+            "outletId": "outlet-1",
+            "price": 300,
+            "description": "Professional haircut service",
+            "createdAt": "2023-01-01 08:00:00"
+        },
+        {
+            "id": "svc-2",
+            "name": "Shave",
+            "outletId": "outlet-1",
+            "price": 150,
+            "description": "Traditional shave service",
+            "createdAt": "2023-01-01 08:00:00"
+        }
+    ],
+    "packages": [
+        {
+            "id": "pkg-1",
+            "name": "Basic Package",
+            "outletId": "outlet-1",
+            "services": [
+                "svc-1",
+                "svc-2"
+            ],
+            "price": 400,
+            "description": "Basic service package",
+            "createdAt": "2023-01-01 08:00:00"
+        }
+    ]
+}
