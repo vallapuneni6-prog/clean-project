@@ -69,38 +69,56 @@ try {
 }
 
 function getPayrollData($pdo, $month, $outletId) {
-    // Parse month
-    list($year, $monthNum) = explode('-', $month);
-    $startDate = "$year-$monthNum-01";
-    $endDate = date('Y-m-t', strtotime($startDate));
-    $daysInMonth = (int)date('t', strtotime($startDate)); // Get actual number of days in month
+     // Parse month
+     list($year, $monthNum) = explode('-', $month);
+     $startDate = "$year-$monthNum-01";
+     $endDate = date('Y-m-t', strtotime($startDate));
+     $daysInMonth = (int)date('t', strtotime($startDate)); // Get actual number of days in month
+     
+     // Calculate days worked till current date (or end of month if current month)
+     $today = new DateTime();
+     $endOfMonth = new DateTime($endDate);
+     $currentMonth = $year . '-' . $monthNum;
+     $todayMonth = $today->format('Y-m');
+     
+     if ($currentMonth === $todayMonth) {
+         // Current month - calculate till today
+         $calculationEndDate = min($today, $endOfMonth);
+         $daysWorkedTillDate = (int)$calculationEndDate->format('d');
+     } else {
+         // Past month - use full month
+         $daysWorkedTillDate = $daysInMonth;
+     }
+     
+     // Get total daily expenses for the month
+     $totalOutletExpenses = 0;
+     try {
+         $stmt = $pdo->prepare('
+             SELECT COALESCE(SUM(expense_amount), 0) as total
+             FROM daily_expenses
+             WHERE outlet_id = ? AND expense_date BETWEEN ? AND ?
+         ');
+         $stmt->execute([$outletId, $startDate, $endDate]);
+         $result = $stmt->fetch(PDO::FETCH_ASSOC);
+         $totalOutletExpenses = (float)($result['total'] ?? 0);
+     } catch (Exception $e) {
+         $totalOutletExpenses = 0;
+     }
+     
+     // Get all active staff for the outlet
+     $stmt = $pdo->prepare('
+         SELECT id, name, phone, salary
+         FROM staff
+         WHERE active = 1 AND outlet_id = ?
+         ORDER BY name ASC
+     ');
+     $stmt->execute([$outletId]);
+     $staff = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Calculate days worked till current date (or end of month if current month)
-    $today = new DateTime();
-    $endOfMonth = new DateTime($endDate);
-    $currentMonth = $year . '-' . $monthNum;
-    $todayMonth = $today->format('Y-m');
-    
-    if ($currentMonth === $todayMonth) {
-        // Current month - calculate till today
-        $calculationEndDate = min($today, $endOfMonth);
-        $daysWorkedTillDate = (int)$calculationEndDate->format('d');
-    } else {
-        // Past month - use full month
-        $daysWorkedTillDate = $daysInMonth;
-    }
-    
-    // Get all active staff for the outlet
-    $stmt = $pdo->prepare('
-        SELECT id, name, phone, salary
-        FROM staff
-        WHERE active = 1 AND outlet_id = ?
-        ORDER BY name ASC
-    ');
-    $stmt->execute([$outletId]);
-    $staff = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $payrollData = [];
+    $payrollData = [
+        'outletExpenses' => $totalOutletExpenses,
+        'staff' => []
+    ];
     
     foreach ($staff as $person) {
         $staffId = $person['id'];
@@ -175,13 +193,16 @@ function getPayrollData($pdo, $month, $outletId) {
         $advance = (float)$adjustments['advance'] ?? 0;
         
         // Calculate salary to credit
-        $salary = (float)$person['salary'];
-        $dailyRate = $salary / $daysInMonth; // Daily rate based on actual days in month
-        $proRataSalary = $dailyRate * $daysWorkedTillDate; // Salary calculated till current date
-        $leaveDeduction = $totalLeaveDays * $dailyRate; // Deduct based on leave days (counting weekend as 2)
-        $salaryToCredit = $proRataSalary + $incentive + $ot + $extraDays - $advance - $leaveDeduction;
+         $salary = (float)$person['salary'];
+         $dailyRate = $salary / $daysInMonth; // Daily rate based on actual days in month
+         
+         // Salary based on actual attendance days worked
+         $actualWorkingDays = $attendance; // Days where status is "Present" or "Week Off"
+         $proRataSalary = $dailyRate * $actualWorkingDays; // Salary for days actually worked
+         $leaveDeduction = $totalLeaveDays * $dailyRate; // Deduct based on leave days (counting weekend as 2)
+         $salaryToCredit = $proRataSalary + $incentive + $ot + $extraDays - $advance - $leaveDeduction;
         
-        $payrollData[] = [
+        $payrollData['staff'][] = [
             'staffId' => $staffId,
             'staffName' => $person['name'],
             'phone' => $person['phone'] ?? '',
@@ -196,9 +217,9 @@ function getPayrollData($pdo, $month, $outletId) {
             'leaveDeduction' => $leaveDeduction,
             'salaryToCredit' => $salaryToCredit
         ];
-    }
-    
-    sendJSON($payrollData);
+        }
+        
+        sendJSON($payrollData);
 }
 
 function updatePayroll($pdo, $data) {

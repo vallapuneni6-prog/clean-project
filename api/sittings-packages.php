@@ -1,25 +1,76 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/sittings_packages_error.log');
+
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
 require_once 'helpers/auth.php';
 
+// Configure session to work with CORS
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
     session_start();
 }
 
-$user = verifyAuthorization(true);
+// CORS headers
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Credentials: true');
+
+// Handle preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 try {
+    $user = verifyAuthorization(true);
+    $currentUserId = $user['user_id'];
+    
     $pdo = getDBConnection();
     
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $type = $_GET['type'] ?? 'templates';
-        
-        if ($type === 'templates') {
-            // Get all sittings package templates
-            try {
-                $stmt = $pdo->query("SELECT * FROM sittings_packages ORDER BY created_at DESC");
-                $templates = $stmt->fetchAll();
+    // Fetch user info from database (more reliable than JWT)
+    $userStmt = $pdo->prepare("SELECT role, is_super_admin FROM users WHERE id = ?");
+    $userStmt->execute([$currentUserId]);
+    $userRow = $userStmt->fetch();
+    
+    if (!$userRow) {
+        sendError('User not found', 404);
+        exit;
+    }
+    
+    $userRole = $userRow['role'];
+    $isSuperAdmin = (bool)$userRow['is_super_admin'];
+     
+     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+          $type = $_GET['type'] ?? 'templates';
+         
+         if ($type === 'templates') {
+             // Get all sittings package templates
+             // Admin sees all, user sees only templates from their assigned outlets or global templates
+             try {
+                 if ($isSuperAdmin || $userRole === 'admin') {
+                     error_log("Admin/Super-admin sittings templates query");
+                     $stmt = $pdo->prepare("SELECT * FROM sittings_packages ORDER BY created_at DESC");
+                     $stmt->execute();
+                 } else {
+                     // Regular user: see templates from their assigned outlets + global templates (outlet_id IS NULL)
+                     $stmt = $pdo->prepare("
+                         SELECT DISTINCT sp.* 
+                         FROM sittings_packages sp
+                         LEFT JOIN user_outlets uo ON sp.outlet_id = uo.outlet_id
+                         WHERE sp.outlet_id IS NULL OR uo.user_id = ?
+                         ORDER BY sp.created_at DESC
+                     ");
+                     $stmt->execute([$currentUserId]);
+                 }
+                 $templates = $stmt->fetchAll();
             } catch (PDOException $e) {
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
                     // Tables don't exist yet, return empty array
@@ -45,29 +96,31 @@ try {
             sendJSON($templates);
             
         } elseif ($type === 'customer_packages') {
-            // Get customer sittings packages (optionally filtered by outlet)
+            // Get customer sittings packages
+            // Admin sees all, user sees only packages from their assigned outlets
             try {
-                $outletId = $_GET['outletId'] ?? null;
-                
-                if ($outletId) {
-                    // Filter by outlet
+                if ($isSuperAdmin || $userRole === 'admin') {
+                    // Admin: see all packages
+                    error_log("Admin/Super-admin customer sittings packages query");
                     $stmt = $pdo->prepare("
                         SELECT csp.*, sp.paid_sittings, sp.free_sittings, sp.service_id as template_service_id, sp.service_name as template_service_name
                         FROM customer_sittings_packages csp
                         LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id
-                        WHERE csp.outlet_id = :outletId
                         ORDER BY csp.assigned_date DESC
                     ");
-                    $stmt->execute([':outletId' => $outletId]);
+                    $stmt->execute();
                     $packages = $stmt->fetchAll();
                 } else {
-                    // No outlet filter, return all packages
-                    $stmt = $pdo->query("
+                    // Regular user: see only packages from their assigned outlets
+                    $stmt = $pdo->prepare("
                         SELECT csp.*, sp.paid_sittings, sp.free_sittings, sp.service_id as template_service_id, sp.service_name as template_service_name
                         FROM customer_sittings_packages csp
                         LEFT JOIN sittings_packages sp ON csp.sittings_package_id = sp.id
+                        INNER JOIN user_outlets uo ON csp.outlet_id = uo.outlet_id
+                        WHERE uo.user_id = ?
                         ORDER BY csp.assigned_date DESC
                     ");
+                    $stmt->execute([$currentUserId]);
                     $packages = $stmt->fetchAll();
                 }
             } catch (PDOException $e) {
@@ -117,37 +170,29 @@ try {
         $action = $data['action'] ?? '';
         
         if ($action === 'create_template') {
-            // Create new sittings package template
-            validateRequired($data, ['name', 'paidSittings', 'freeSittings']);
-            
-            $name = sanitizeString($data['name']);
-            $paidSittings = filter_var($data['paidSittings'], FILTER_VALIDATE_INT);
-            $freeSittings = filter_var($data['freeSittings'], FILTER_VALIDATE_INT);
-            $serviceIds = $data['serviceIds'] ?? [];
-            
-            if ($paidSittings === false || $paidSittings <= 0) {
-                sendError('Paid sittings must be a positive number', 400);
-            }
-            
-            if ($freeSittings === false || $freeSittings <= 0) {
-                sendError('Free sittings must be a positive number', 400);
-            }
-            
-            $outletId = $data['outletId'] ?? '';
-            
-            if (empty($outletId) && !empty($_SESSION['user_id'])) {
-                $stmt = $pdo->prepare("
-                    SELECT outlet_id FROM user_outlets 
-                    WHERE user_id = :userId 
-                    ORDER BY outlet_id ASC 
-                    LIMIT 1
-                ");
-                $stmt->execute(['userId' => $_SESSION['user_id']]);
-                $userOutlet = $stmt->fetch();
-                if ($userOutlet) {
-                    $outletId = $userOutlet['outlet_id'];
-                }
-            }
+             // Only admins can create templates
+             if (!($isSuperAdmin || $userRole === 'admin')) {
+                 sendError('Only administrators can create sittings package templates', 403);
+             }
+             
+             // Create new sittings package template
+             validateRequired($data, ['name', 'paidSittings', 'freeSittings']);
+             
+             $name = sanitizeString($data['name']);
+             $paidSittings = filter_var($data['paidSittings'], FILTER_VALIDATE_INT);
+             $freeSittings = filter_var($data['freeSittings'], FILTER_VALIDATE_INT);
+             $serviceIds = $data['serviceIds'] ?? [];
+             
+             if ($paidSittings === false || $paidSittings <= 0) {
+                 sendError('Paid sittings must be a positive number', 400);
+             }
+             
+             if ($freeSittings === false || $freeSittings <= 0) {
+                 sendError('Free sittings must be a positive number', 400);
+             }
+             
+             // Admin templates are global (outlet_id = NULL) - available to all outlets
+             $outletId = null;
             
             $templateId = generateId('sp-');
             $serviceIdsJson = json_encode(is_array($serviceIds) ? $serviceIds : []);
@@ -484,19 +529,21 @@ try {
                      $staffSalesId = generateId('ss-');
                      try {
                          $salesStmt = $pdo->prepare("
-                             INSERT INTO service_records (id, staff_name, staff_id, service_name, service_value, outlet_id, created_date, is_sittings_redemption)
-                             VALUES (:id, :staffName, :staffId, :serviceName, :serviceValue, :outletId, :date, 1)
-                         ");
-                         
-                         $salesStmt->execute([
-                             ':id' => $staffSalesId,
-                             ':staffName' => $staffName,
-                             ':staffId' => $staffId,
-                             ':serviceName' => $serviceName,
-                             ':serviceValue' => $serviceValue,
-                             ':outletId' => $outletId,
-                             ':date' => date('Y-m-d H:i:s')
-                         ]);
+                                 INSERT INTO service_records (id, staff_name, customer_name, customer_mobile, service_name, service_value, outlet_id, redeemed_date, transaction_id)
+                                 VALUES (:id, :staffName, :customerName, :customerMobile, :serviceName, :serviceValue, :outletId, :date, :txnId)
+                             ");
+                             
+                             $salesStmt->execute([
+                                 ':id' => $staffSalesId,
+                                 ':staffName' => $staffName,
+                                 ':customerName' => $packageDetails['customer_name'] ?? '',
+                                 ':customerMobile' => $packageDetails['customer_mobile'] ?? '',
+                                 ':serviceName' => $serviceName,
+                                 ':serviceValue' => $serviceValue,
+                                 ':outletId' => $outletId,
+                                 ':date' => date('Y-m-d'),
+                                 ':txnId' => generateId('txn-')
+                             ]);
                          
                          error_log("Staff commission recorded for {$staffName}: ₹" . ($serviceValue * 0.6));
                      } catch (PDOException $e) {
@@ -685,6 +732,11 @@ try {
                 sendError('Failed to retrieve redemption history: ' . $e->getMessage(), 500);
             }
         } elseif ($action === 'delete_template') {
+            // Only admins can delete templates
+            if (!($isSuperAdmin || $userRole === 'admin')) {
+                sendError('Only administrators can delete sittings package templates', 403);
+            }
+            
             // Delete sittings package template
             validateRequired($data, ['id']);
             

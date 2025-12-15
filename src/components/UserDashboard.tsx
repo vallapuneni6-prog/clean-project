@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CustomerPackage, User, Outlet, PackageTemplate, SittingsPackage, CustomerSittingsPackage } from '../types';
+import { CustomerPackage, User, Outlet, PackageTemplate, SittingsPackage, CustomerSittingsPackage, ServiceRecord } from '../types';
 import { generateBrandedPackageInvoiceImage, generateBrandedSittingsInvoiceImage } from './downloadBrandedPackage';
 
 interface UserDashboardProps {
@@ -124,6 +124,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     const [whatsAppImageData, setWhatsAppImageData] = useState<string | null>(null);
     const [whatsAppPackage, setWhatsAppPackage] = useState<CustomerPackage | CustomerSittingsPackage | null>(null);
 
+
+
     const messageStyles = {
         success: 'bg-green-100 border border-green-400 text-green-700',
         error: 'bg-red-100 border border-red-400 text-red-700',
@@ -203,31 +205,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
     useEffect(() => {
         // Reload data when redeem sittings form is opened
-         if (showRedeemSittingsForm) {
-             loadData();
-         }
+        if (showRedeemSittingsForm) {
+            loadData();
+        }
     }, [showRedeemSittingsForm]);
 
     useEffect(() => {
-         // Update filtered packages when redeem form opens to ensure they're visible
-         if (showRedeemSittingsForm && redeemSearchQuerySittings === '') {
-             setFilteredCustomerSittingsPackages(customerSittingsPackages);
-         }
-     }, [showRedeemSittingsForm, customerSittingsPackages]);
+        // Update filtered packages when redeem form opens to ensure they're visible
+        if (showRedeemSittingsForm && redeemSearchQuerySittings === '') {
+            setFilteredCustomerSittingsPackages(customerSittingsPackages);
+        }
+    }, [showRedeemSittingsForm, customerSittingsPackages]);
 
     useEffect(() => {
-         // Reload data when assign sittings form is opened to ensure latest templates
-         if (showAssignSittingsForm) {
-             loadData();
-         }
-     }, [showAssignSittingsForm]);
+        // Reload data when assign sittings form is opened to ensure latest templates
+        if (showAssignSittingsForm) {
+            loadData();
+        }
+    }, [showAssignSittingsForm]);
 
     useEffect(() => {
-         // Reload data when switching to sittings packages tab (assign tab specifically)
-         if (activePackageType === 'sittings' && activeTab === 'assign') {
-             loadData();
-         }
-     }, [activePackageType, activeTab]);
+        // Reload data when switching to sittings packages tab (assign tab specifically)
+        if (activePackageType === 'sittings' && activeTab === 'assign') {
+            loadData();
+        }
+    }, [activePackageType, activeTab]);
 
 
 
@@ -262,13 +264,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             const authToken = localStorage.getItem('authToken') || '';
             const headers = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
 
+            // Fetch options with credentials for session handling
+            const fetchOptions = {
+                headers,
+                credentials: 'include' as const
+            };
+
             const [packagesRes, customerPackagesRes, staffRes, servicesRes, sittingsTemplatesRes, customerSittingsRes] = await Promise.all([
-                fetch('/api/packages?type=templates', { headers }),
-                fetch('/api/packages?type=customer_packages', { headers }),
-                fetch(staffUrl, { headers }),
-                fetch('/api/services?action=list', { headers }),
-                fetch('/api/sittings-packages?type=templates', { headers }),
-                fetch(sittingsPackagesUrl, { headers })
+                fetch('/api/packages?type=templates', fetchOptions),
+                fetch('/api/packages?type=customer_packages', fetchOptions),
+                fetch(staffUrl, fetchOptions).catch(err => {
+                    console.error('Staff fetch failed:', err);
+                    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+                }),
+                fetch('/api/services?action=list', fetchOptions),
+                fetch('/api/sittings-packages?type=templates', fetchOptions),
+                fetch(sittingsPackagesUrl, fetchOptions)
             ]);
 
             if (packagesRes.ok) {
@@ -305,13 +316,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
             if (staffRes.ok) {
                 const staffData = await staffRes.json();
+                console.log('Staff data loaded:', staffData);
                 setStaff(staffData);
+            } else {
+                console.warn('Staff fetch failed with status:', staffRes.status);
+                if (!staffRes.ok) {
+                    const errorData = await staffRes.json().catch(() => ({ error: 'Unknown error' }));
+                    console.warn('Staff error:', errorData);
+                }
             }
 
             if (servicesRes.ok) {
                 setServices(await servicesRes.json());
             }
         } catch (error) {
+            console.error('Error loading data:', error);
             showMessage('Failed to load data', 'error');
         } finally {
             setLoading(false);
@@ -390,14 +409,24 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                             serviceValue: template.serviceValue
                         };
 
-                        console.log('Generating invoice with:', { newPackage, templateData, outlet, records: result.newRecords });
+                        // Ensure service records are properly formatted
+                        const serviceRecords: ServiceRecord[] = (result.newRecords || []).map((record: any) => ({
+                            id: record.id || '',
+                            customerPackageId: record.customerPackageId || '',
+                            serviceName: record.serviceName || '',
+                            serviceValue: typeof record.serviceValue === 'number' ? record.serviceValue : parseFloat(record.serviceValue || '0'),
+                            redeemedDate: new Date(record.redeemedDate || new Date()),
+                            transactionId: record.transactionId || ''
+                        }));
+
+                        console.log('Generating invoice with:', { newPackage, templateData, outlet, records: serviceRecords });
 
                         // Generate invoice image
                         const invoiceImage = await generateBrandedPackageInvoiceImage(
                             newPackage,
                             templateData,
                             outlet,
-                            result.newRecords || []
+                            serviceRecords
                         );
 
                         console.log('Invoice image generated successfully');
@@ -494,8 +523,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             });
 
             if (response.ok) {
-                const result = await response.json();
-                showMessage('Service redeemed successfully!', 'success');
+                 const result = await response.json();
+                 showMessage('Service redeemed successfully!', 'success');
 
                 // Try to generate invoice
                 try {
@@ -504,11 +533,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     const outlet = outlets.find(o => o.id === userOutletId);
 
                     if (pkg && template && outlet && result.newRecords) {
+                        // Ensure service records are properly formatted
+                        const serviceRecords: ServiceRecord[] = (result.newRecords || []).map((record: any) => ({
+                            id: record.id || '',
+                            customerPackageId: record.customerPackageId || '',
+                            serviceName: record.serviceName || '',
+                            serviceValue: typeof record.serviceValue === 'number' ? record.serviceValue : parseFloat(record.serviceValue || '0'),
+                            redeemedDate: new Date(record.redeemedDate || new Date()),
+                            transactionId: record.transactionId || ''
+                        }));
                         const invoiceImage = await generateBrandedPackageInvoiceImage(
                             pkg,
                             template,
                             outlet,
-                            result.newRecords || []
+                            serviceRecords,
+                            result.balanceProgression
                         );
                         setWhatsAppImageData(invoiceImage);
                         setWhatsAppPackage(pkg);
@@ -1283,7 +1322,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
 
     const handleWhatsAppPreview = async (pkg: CustomerPackage, template: PackageTemplate, outlet: Outlet) => {
         try {
-            const invoiceImage = await generateBrandedPackageInvoiceImage(pkg, template, outlet, []);
+            // Fetch service records for this package
+            const servicesResponse = await fetch(`/api/packages.php?type=service_records`);
+            const allServiceRecords: ServiceRecord[] = await servicesResponse.json();
+            const packageServices = allServiceRecords.filter(r => r.customerPackageId === pkg.id);
+
+            const invoiceImage = await generateBrandedPackageInvoiceImage(pkg, template, outlet, packageServices);
             setWhatsAppImageData(invoiceImage);
             setWhatsAppPackage(pkg);
             setShowWhatsAppPreview(true);
@@ -1321,16 +1365,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     // Fetch and show redeem history
     const showRedeemHistory = async (packageId: string) => {
         try {
-            const response = await fetch(`/api/packages?type=service_records`);
-            if (response.ok) {
-                const records = await response.json();
-                const packageRecords = records.filter((r: any) => r.customerPackageId === packageId);
-                setHistoryRecords(packageRecords);
-                setShowHistory(packageId);
+            setLoading(true);
+            const authToken = localStorage.getItem('authToken') || '';
+            const headers = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+            
+            const response = await fetch(`/api/packages?type=service_records`, { headers, credentials: 'include' });
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: 'Failed to load history' }));
+                console.error('History fetch error:', error);
+                showMessage(error.error || 'Failed to load history', 'error');
+                return;
             }
+            
+            const records = await response.json();
+            const packageRecords = records.filter((r: any) => r.customerPackageId === packageId);
+            
+            if (packageRecords.length === 0) {
+                showMessage('No redemption history found for this package', 'warning');
+            }
+            
+            setHistoryRecords(packageRecords);
+            setShowHistory(packageId);
         } catch (error) {
             console.error('Error fetching history:', error);
-            showMessage('Error loading history', 'error');
+            showMessage('Error loading history: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -1368,11 +1429,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 [record] // Pass only this transaction record
             );
 
-            // Show preview
-            setInvoicePreview(invoiceImage);
-            setPreviewPackage(pkg);
-            setPreviewTemplate(template);
-            setPreviewOutlet(outlet);
+            // Show WhatsApp preview instead of regular preview
+            setWhatsAppImageData(invoiceImage);
+            setWhatsAppPackage(pkg);
+            setShowWhatsAppPreview(true);
             showMessage('Invoice generated successfully', 'success');
         } catch (error) {
             console.error('Error generating old invoice:', error);

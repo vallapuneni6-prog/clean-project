@@ -1,10 +1,34 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/login_error.log');
+
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
 require_once 'helpers/auth.php';
 
-// Rate limiting - simple implementation
-session_start();
+// Configure session to work with CORS
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
+    session_start();
+}
+
+// CORS headers for credential requests
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Credentials: true');
+
+// Handle preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
 if (!isset($_SESSION['login_attempts'])) {
     $_SESSION['login_attempts'] = 0;
     $_SESSION['last_attempt'] = time();

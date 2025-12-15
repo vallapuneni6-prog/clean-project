@@ -32,7 +32,6 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
     const [plData, setPlData] = useState<PLData | null>(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning' | 'info'; text: string } | null>(null);
-    const [showAddExpenseForm, setShowAddExpenseForm] = useState(false);
     const [editingField, setEditingField] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<string>('');
 
@@ -47,6 +46,9 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
         marketing: 0,
         others: '',
     });
+
+    // Check if user is super admin
+    const isSuperAdmin = currentUser.isSuperAdmin === true;
 
     const messageStyles = {
         success: 'bg-green-100 border border-green-400 text-green-700',
@@ -93,7 +95,6 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
                 showMessage(errorData.message || 'Failed to load P&L data', 'error');
             }
         } catch (error) {
-            console.error('Error loading P&L data:', error);
             showMessage('Error loading P&L data', 'error');
         } finally {
             setLoading(false);
@@ -127,14 +128,20 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
                 showMessage(errorData.message || 'Failed to update expense', 'error');
             }
         } catch (error) {
-            console.error('Error updating expense:', error);
             showMessage('Error updating expense', 'error');
         }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingField(null);
+        setEditValue('');
     };
 
     const getExpenseValue = (field: string): number | string => {
         return manualExpenses[field as keyof typeof manualExpenses] || 0;
     };
+
+
 
     // Calculate totals
     const totalExpenses = (plData?.rent || 0) +
@@ -153,19 +160,19 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
 
     const rows = [
         { label: 'Total Income', value: plData?.totalIncome || 0, isHeader: true, isIncome: true },
-        { label: 'Rent', field: 'rent', editable: true },
-        { label: 'Royalty', field: 'royalty', editable: true },
+        { label: 'Rent', field: 'rent', editable: !isSuperAdmin },
+        { label: 'Royalty', field: 'royalty', editable: !isSuperAdmin },
         { label: 'Salaries', value: plData?.salaries || 0, description: 'From Payroll' },
         { label: 'Incentives', value: plData?.incentives || 0, description: 'From Payroll' },
-        { label: 'GST', field: 'gst', editable: true },
-        { label: 'Power Bill', field: 'powerBill', editable: true },
-        { label: 'Products Bill', field: 'productsBill', editable: true },
-        { label: 'Mobile & Internet', field: 'mobileInternet', editable: true },
-        { label: 'Laundry', field: 'laundry', editable: true },
-        { label: 'Marketing', field: 'marketing', editable: true },
-        { label: 'Others', field: 'others', editable: true, isText: true },
-        { label: 'Outlet Expenses', value: plData?.outletExpenses || 0, hasButton: true },
-        { label: 'Total Outlet Expenses', value: totalExpenses, isHeader: true, isExpense: true },
+        { label: 'GST', field: 'gst', editable: !isSuperAdmin },
+        { label: 'Power Bill', field: 'powerBill', editable: !isSuperAdmin },
+        { label: 'Products Bill', field: 'productsBill', editable: !isSuperAdmin },
+        { label: 'Mobile & Internet', field: 'mobileInternet', editable: !isSuperAdmin },
+        { label: 'Laundry', field: 'laundry', editable: !isSuperAdmin },
+        { label: 'Marketing', field: 'marketing', editable: !isSuperAdmin },
+        { label: 'Others', field: 'others', editable: !isSuperAdmin, isText: true },
+        { label: 'Outlet Expenses', value: plData?.outletExpenses || 0 },
+        { label: 'Total Expenses', value: totalExpenses, isHeader: true, isExpense: true },
         { label: 'Total Profit', value: totalProfit, isHeader: true, isProfit: true },
     ];
 
@@ -228,33 +235,21 @@ export const ProfitAndLoss: React.FC<ProfitAndLossProps> = ({ currentUser, outle
                                 return (
                                     <tr
                                         key={idx}
-                                        className={`border-b ${
-                                            row.isHeader
+                                        className={`border-b ${row.isHeader
                                                 ? row.isProfit
                                                     ? 'bg-green-50 border-green-200'
                                                     : row.isExpense
-                                                    ? 'bg-red-50 border-red-200'
-                                                    : 'bg-blue-50 border-blue-200'
+                                                        ? 'bg-red-50 border-red-200'
+                                                        : 'bg-blue-50 border-blue-200'
                                                 : 'hover:bg-gray-50'
-                                        }`}
+                                            }`}
                                     >
                                         <td className={`px-6 py-4 ${row.isHeader ? 'font-bold' : 'text-gray-700'}`}>
-                                            <div className="flex items-center justify-between">
-                                                <span>{row.label}</span>
-                                                {row.hasButton && (
-                                                    <button
-                                                        onClick={() => setShowAddExpenseForm(!showAddExpenseForm)}
-                                                        className="ml-4 bg-brand-primary text-white px-3 py-1 text-sm rounded hover:opacity-90"
-                                                    >
-                                                        Add Expense
-                                                    </button>
-                                                )}
-                                            </div>
+                                            <span>{row.label}</span>
                                             {row.description && <p className="text-xs text-gray-500 mt-1">{row.description}</p>}
                                         </td>
-                                        <td className={`px-6 py-4 text-right ${row.isHeader ? 'font-bold' : ''} ${
-                                            row.isProfit ? 'text-green-600' : row.isExpense ? 'text-red-600' : ''
-                                        }`}>
+                                        <td className={`px-6 py-4 text-right ${row.isHeader ? 'font-bold' : ''} ${row.isProfit ? 'text-green-600' : row.isExpense ? 'text-red-600' : ''
+                                            }`}>
                                             {isEditingThis ? (
                                                 <div className="flex gap-2 justify-end">
                                                     <input

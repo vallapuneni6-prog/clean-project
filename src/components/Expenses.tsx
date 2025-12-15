@@ -69,11 +69,16 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
 
     useEffect(() => {
         loadExpenses();
-        // Auto-populate opening balance with yesterday's closing balance
-        loadYesterdayClosingBalance();
     }, []);
 
-    const loadYesterdayClosingBalance = async () => {
+    useEffect(() => {
+        // Auto-populate opening balance when form is opened
+        if (showAddForm) {
+            loadYesterdayClosingBalance(formData.expenseDate);
+        }
+    }, [showAddForm]);
+
+    const loadYesterdayClosingBalance = async (selectedDate?: string) => {
         try {
             if (!userOutletId) {
                 return;
@@ -86,21 +91,38 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
             if (response.ok) {
                 const expenses = await response.json();
                 if (expenses.length > 0) {
-                    // Get the most recent closing balance
-                    const lastExpense = expenses[0];
-                    const yesterdayClosingBalance = parseFloat(lastExpense.closingBalance) || 0;
+                    const dateToUse = selectedDate || new Date().toISOString().split('T')[0];
+                    const selectedDateTime = new Date(dateToUse).getTime();
                     
-                    // Auto-populate opening balance
-                    setFormData(prevData => ({
-                        ...prevData,
-                        openingBalance: yesterdayClosingBalance
-                    }));
+                    // Find the most recent expense before the selected date
+                    const previousExpense = expenses.find((exp: UserExpense) => {
+                        const expTime = new Date(exp.expenseDate).getTime();
+                        return expTime < selectedDateTime;
+                    });
                     
-                    console.log('Auto-populated opening balance from yesterday:', yesterdayClosingBalance);
+                    if (previousExpense) {
+                        // Found an expense on an earlier date, use its closing balance
+                        const closingBalance = parseFloat(previousExpense.closingBalance) || 0;
+                        setFormData(prevData => ({
+                            ...prevData,
+                            openingBalance: closingBalance
+                        }));
+                        console.log('Auto-populated opening balance from previous day:', closingBalance);
+                    } else {
+                        // No expense on earlier date, use the most recent expense's closing balance
+                        // This handles cases where creating multiple expenses on the same date
+                        const mostRecentExpense = expenses[0];
+                        const closingBalance = parseFloat(mostRecentExpense.closingBalance) || 0;
+                        setFormData(prevData => ({
+                            ...prevData,
+                            openingBalance: closingBalance
+                        }));
+                        console.log('Auto-populated opening balance from most recent expense:', closingBalance);
+                    }
                 }
             }
         } catch (error) {
-            console.error('Error loading yesterday closing balance:', error);
+            console.error('Error loading closing balance:', error);
             // Silently fail - user can enter manually
         }
     };
@@ -177,6 +199,11 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
 
     const handleFormChange = (field: string, value: any) => {
         const newFormData = { ...formData, [field]: value };
+
+        // Auto-load opening balance when date changes
+        if (field === 'expenseDate') {
+            loadYesterdayClosingBalance(value);
+        }
 
         // Auto-calculate balance when relevant fields change
         if (field === 'openingBalance' || field === 'cashReceivedToday' || field === 'expenseAmount' || field === 'cashDeposited') {

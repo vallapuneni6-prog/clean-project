@@ -28,7 +28,8 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
     friendsName: '',
     friendsMobile: '',
     billNo: '',
-    recipientName: ''
+    recipientName: '',
+    selectedOutletId: ''
   });
   const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
@@ -267,8 +268,9 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
     const friendName = successData.recipientName;
     
     // Get the outlet name from the current user's assigned outlet
-    const outletName = currentUser?.outletId 
-      ? outlets.find(o => o.id === currentUser.outletId)?.name || 'Naturals Salon'
+    const userOutletId = currentUser?.outletId || (currentUser?.outletIds && currentUser.outletIds[0]);
+    const outletName = userOutletId
+      ? outlets.find(o => o.id === userOutletId)?.name || 'Naturals Salon'
       : 'Naturals Salon';
     
     return `Hi *${friendName}*,
@@ -356,20 +358,37 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
   const handleIssueVoucher = async () => {
     const { referringCustomerName, friendsName, friendsMobile, billNo } = issueFormData;
     
+    console.log('Current user:', currentUser);
+    console.log('Current user outlets:', currentUser?.outletIds);
+    console.log('Available outlets:', outlets);
+    
     if (!referringCustomerName || !friendsName || !friendsMobile || !billNo) {
       addNotification('Please fill all fields', 'warning');
       return;
     }
 
-    if (!currentUser?.outletId) {
-      addNotification('Your user account is not assigned to any outlet', 'error');
+    // Get the user's primary outlet ID (use outletId if available, otherwise use first outlet from outletIds)
+    let userOutletId = currentUser?.outletId || (currentUser?.outletIds && currentUser.outletIds[0]);
+    
+    // If user has no assigned outlets but is an admin, they can select from all outlets
+    if (!userOutletId && (currentUser?.isSuperAdmin || currentUser?.role === 'admin')) {
+      userOutletId = issueFormData.selectedOutletId;
+    }
+    
+    console.log('Resolved user outlet ID:', userOutletId);
+    console.log('Selected outlet ID from form:', issueFormData.selectedOutletId);
+    
+    if (!userOutletId) {
+      addNotification('Please select an outlet to issue the voucher from.', 'error');
       return;
     }
 
     // Find the user's outlet to get the outlet code
-    const userOutlet = outlets.find(o => o.id === currentUser.outletId);
+    const userOutlet = outlets.find(o => o.id === userOutletId);
+    console.log('Found user outlet:', userOutlet);
+    
     if (!userOutlet) {
-      addNotification('Outlet not found for your account', 'error');
+      addNotification('Outlet not found. Please select a valid outlet.', 'error');
       return;
     }
 
@@ -409,7 +428,7 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
          });
          setShowSuccessSection(true);
          setShowIssueForm(false);
-         setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
+         setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '', selectedOutletId: '' });
         addNotification('Voucher issued successfully!', 'success');
         await loadData();
       } else {
@@ -474,7 +493,7 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
                 <button
                   onClick={() => {
                     setShowIssueForm(false);
-                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
+                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '', selectedOutletId: '' });
                   }}
                   className="text-gray-500 hover:text-gray-700 text-2xl"
                 >
@@ -519,21 +538,38 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
                 </div>
                 
                 <div>
-                   <label className="block text-sm font-semibold text-gray-700 mb-2">Bill No *</label>
-                   <input
-                     type="text"
-                     placeholder="Enter bill number"
-                     value={issueFormData.billNo}
-                     onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
-                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
-                   />
-                 </div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bill No *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter bill number"
+                    value={issueFormData.billNo}
+                    onChange={(e) => setIssueFormData({ ...issueFormData, billNo: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400"
+                  />
+                </div>
+
+                {/* Outlet selector for admins with no assigned outlets */}
+                {!currentUser?.outletId && !currentUser?.outletIds?.length && (currentUser?.isSuperAdmin || currentUser?.role === 'admin') && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Outlet *</label>
+                    <select
+                      value={issueFormData.selectedOutletId}
+                      onChange={(e) => setIssueFormData({ ...issueFormData, selectedOutletId: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">Select an outlet...</option>
+                      {outlets.map(outlet => (
+                        <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 </div>
               
               <div className="flex gap-4 mt-8">
                 <button
                   onClick={() => {
-                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '' });
+                    setIssueFormData({ referringCustomerName: '', friendsName: '', friendsMobile: '', billNo: '', recipientName: '', selectedOutletId: '' });
                   }}
                   className="flex-1 px-6 py-3 bg-gray-200 text-gray-900 font-bold rounded-lg hover:bg-gray-300 transition-colors"
                 >
@@ -634,9 +670,12 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
                     <div className="text-center">
                       <img src="/logo.png" alt="Naturals Logo" className="h-16 mb-4" />
                       <p className="text-gray-800 font-bold text-lg">
-                        {currentUser?.outletId 
-                          ? outlets.find(o => o.id === currentUser.outletId)?.name || 'Naturals Salon'
-                          : 'Naturals Salon'}
+                        {(() => {
+                          const userOutletId = currentUser?.outletId || (currentUser?.outletIds && currentUser.outletIds[0]);
+                          return userOutletId
+                            ? outlets.find(o => o.id === userOutletId)?.name || 'Naturals Salon'
+                            : 'Naturals Salon';
+                        })()}
                       </p>
                     </div>
                     
@@ -811,7 +850,7 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{getOutletName(voucher.outletId, voucher.outletName)}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{voucher.redeemedBillNo || '-'}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{voucher.redemptionBillNo ? `Bill ${voucher.redemptionBillNo}` : '-'}</td>
                         </tr>
                       ))}
                     </tbody>

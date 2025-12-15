@@ -7,35 +7,7 @@ import { getToken, isTokenValid, handleUnauthorized, handleTokenRefresh } from '
 
 const API_BASE = '/api';
 
-/**
- * Debug helper - log request details
- */
-function logRequest(endpoint: string, method: string, hasToken: boolean): void {
-  console.log(`[API] ${method} ${endpoint}`, {
-    hasToken,
-    tokenStatus: hasToken ? `Valid for ${getTokenExpiryInfo()}` : 'No token'
-  });
-}
 
-/**
- * Get token expiry info for logging
- */
-function getTokenExpiryInfo(): string {
-  const token = getToken();
-  if (!token) return 'N/A';
-
-  try {
-    const parts = token.split('.');
-    const decoded = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    if (decoded.exp) {
-      const timeLeft = (decoded.exp * 1000) - Date.now();
-      return `${Math.round(timeLeft / 1000)}s left`;
-    }
-  } catch (e) {
-    return 'Unable to decode';
-  }
-  return 'Unknown';
-}
 
 /**
  * Main API request handler with auth support
@@ -46,14 +18,11 @@ async function apiRequest<T>(
 ): Promise<T> {
   // Validate token before making request
   if (!isTokenValid()) {
-    console.error('[API] Token is not valid', endpoint);
     handleUnauthorized();
     throw new Error('Authentication failed: Invalid or expired token');
   }
 
   const token = getToken();
-  const method = options?.method || 'GET';
-  logRequest(endpoint, method, !!token);
 
   // Setup headers
   const headers = new Headers(options?.headers || {});
@@ -61,15 +30,7 @@ async function apiRequest<T>(
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-    console.log(`[API] ✓ Bearer token added to request`);
-  } else {
-    console.warn('[API] ✗ No token available for authenticated request');
   }
-
-  console.log('[API] Request headers:', {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token.substring(0, 20)}...` : 'None'
-  });
 
   try {
     const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -81,13 +42,11 @@ async function apiRequest<T>(
     // Check for token in response headers
     const newToken = response.headers.get('X-Auth-Token');
     if (newToken) {
-      console.log('[API] Received new token from server - refreshing');
       handleTokenRefresh(newToken);
     }
 
     // Handle unauthorized responses
     if (response.status === 401) {
-      console.error('[API] Received 401 Unauthorized', endpoint);
       handleUnauthorized();
       throw new Error('Unauthorized: Please log in again');
     }
@@ -100,15 +59,11 @@ async function apiRequest<T>(
         errorData = { error: response.statusText };
       }
       
-      console.error(`[API] ${endpoint}: Error ${response.status}`, errorData);
       throw new Error(errorData.error || `API Error: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    console.log(`[API] ✓ ${method} ${endpoint} - Success`);
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error(`[API] ✗ ${method} ${endpoint} - Failed:`, error);
     throw error;
   }
 }
@@ -122,18 +77,15 @@ async function apiFormRequest<T>(
   options?: Omit<RequestInit, 'body'>
 ): Promise<T> {
   if (!isTokenValid()) {
-    console.error('[API] Token is not valid for form request', endpoint);
     handleUnauthorized();
     throw new Error('Authentication failed: Invalid or expired token');
   }
 
   const token = getToken();
-  console.log(`[API] POST ${endpoint} (FormData)`);
 
   const headers = new Headers(options?.headers || {});
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-    console.log('[API] ✓ Bearer token added to form request');
   }
 
   try {
@@ -148,12 +100,10 @@ async function apiFormRequest<T>(
     // Check for token in response
     const newToken = response.headers.get('X-Auth-Token');
     if (newToken) {
-      console.log('[API] Received new token from server - refreshing');
       handleTokenRefresh(newToken);
     }
 
     if (response.status === 401) {
-      console.error('[API] Received 401 Unauthorized on form upload');
       handleUnauthorized();
       throw new Error('Unauthorized: Please log in again');
     }
@@ -165,14 +115,11 @@ async function apiFormRequest<T>(
       } catch {
         errorData = { error: response.statusText };
       }
-      console.error(`[API] ${endpoint}: Error ${response.status}`, errorData);
       throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
     }
 
-    console.log(`[API] ✓ POST ${endpoint} (FormData) - Success`);
     return response.json();
   } catch (error) {
-    console.error(`[API] ✗ POST ${endpoint} (FormData) - Failed:`, error);
     throw error;
   }
 }
@@ -182,13 +129,11 @@ async function apiFormRequest<T>(
  */
 async function apiDownloadRequest(endpoint: string): Promise<Blob> {
   if (!isTokenValid()) {
-    console.error('[API] Token is not valid for download', endpoint);
     handleUnauthorized();
     throw new Error('Authentication failed: Invalid or expired token');
   }
 
   const token = getToken();
-  console.log(`[API] GET ${endpoint} (Download)`);
 
   const headers = new Headers();
   if (token) {
@@ -202,7 +147,6 @@ async function apiDownloadRequest(endpoint: string): Promise<Blob> {
     });
 
     if (response.status === 401) {
-      console.error('[API] Received 401 Unauthorized on download');
       handleUnauthorized();
       throw new Error('Unauthorized: Please log in again');
     }
@@ -211,10 +155,8 @@ async function apiDownloadRequest(endpoint: string): Promise<Blob> {
       throw new Error(`Download failed: ${response.statusText}`);
     }
 
-    console.log(`[API] ✓ GET ${endpoint} (Download) - Success`);
     return response.blob();
   } catch (error) {
-    console.error(`[API] ✗ GET ${endpoint} (Download) - Failed:`, error);
     throw error;
   }
 }

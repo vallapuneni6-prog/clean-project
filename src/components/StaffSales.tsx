@@ -51,31 +51,40 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
       ]);
 
       if (staffRes.ok) {
-        const staffData = await staffRes.json();
-        console.log('Staff data loaded:', staffData);
-        const mappedStaff = staffData.map((s: any) => ({
-          ...s,
-          status: s.active ? 'Active' : 'Inactive'
-        }));
-        console.log('Mapped staff:', mappedStaff);
-        console.log('Staff with Active status:', mappedStaff.filter((s: any) => s.status === 'Active'));
-        setStaff(mappedStaff);
-      } else {
-        console.error('Staff API error:', staffRes.status, staffRes.statusText);
-      }
+         const staffData = await staffRes.json();
+         console.log('Staff data loaded:', staffData);
+         const mappedStaff = staffData.map((s: any) => ({
+           ...s,
+           status: s.active ? 'Active' : 'Inactive'
+         }));
+         console.log('Mapped staff:', mappedStaff);
+         console.log('Staff with Active status:', mappedStaff.filter((s: any) => s.status === 'Active'));
+         setStaff(mappedStaff);
+       } else {
+         console.error('Staff API error:', staffRes.status, staffRes.statusText);
+         const errorData = await staffRes.json().catch(() => ({}));
+         console.error('Error details:', errorData);
+         if (staffRes.status === 403) {
+           addNotification('You do not have access to staff from this outlet.', 'error');
+         } else {
+           addNotification(errorData.error || 'Failed to load staff data', 'error');
+         }
+       }
 
-      if (salesRes.ok) {
-        const salesData = await salesRes.json();
-        setStaffPerformance(salesData.map((s: any) => ({
-          staffId: s.id,
-          staffName: s.name,
-          totalSales: s.totalSales,
-          commission: s.commission, // From API calculation
-          target: s.target,
-          achievedPercentage: s.achievedPercentage,
-          reachedTarget: s.reachedTarget
-        })));
-      }
+       if (salesRes.ok) {
+         const salesData = await salesRes.json();
+         setStaffPerformance(salesData.map((s: any) => ({
+           staffId: s.id,
+           staffName: s.name,
+           totalSales: s.totalSales,
+           target: s.target,
+           achievedPercentage: s.achievedPercentage
+         })));
+       } else {
+         console.error('Sales API error:', salesRes.status, salesRes.statusText);
+         const errorData = await salesRes.json().catch(() => ({}));
+         console.error('Error details:', errorData);
+       }
     } catch (error) {
       console.error('Failed to load staff data:', error);
       addNotification('Failed to load staff data', 'error');
@@ -384,58 +393,30 @@ export const StaffSales: React.FC<StaffSalesProps> = ({ currentUser }) => {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Staff Name</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Sales Amount</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Target</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Commission</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Achievement</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase">Progress</th>
                   </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {staffPerformance.map(perf => {
-                  const achievement = perf.achievedPercentage || ((parseFloat(perf.totalSales || 0) / parseFloat(perf.target || 1)) * 100);
-                  const progressColor = achievement >= 100 ? 'bg-green-500' : achievement >= 75 ? 'bg-yellow-500' : 'bg-red-500';
-                  const hasReachedTarget = perf.reachedTarget;
-                  
-                  return (
+                   const achievement = perf.achievedPercentage || ((parseFloat(perf.totalSales || 0) / parseFloat(perf.target || 1)) * 100);
+                   const progressColor = achievement >= 100 ? 'bg-green-500' : achievement >= 75 ? 'bg-yellow-500' : 'bg-red-500';
+                   
+                   return (
                     <tr key={perf.staffId} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{perf.staffName}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">₹{parseFloat(perf.totalSales || 0).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{parseFloat(perf.target || 0).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-sm">
-                        {hasReachedTarget ? (
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-blue-600">₹{parseFloat(perf.commission || 0).toLocaleString()}</span>
-                            <button
-                              onClick={() => {
-                                // Copy to clipboard
-                                navigator.clipboard.writeText(`${perf.staffName}: ₹${parseFloat(perf.commission || 0).toLocaleString()}`);
-                                addNotification(`Commission for ${perf.staffName} copied to clipboard`, 'success');
-                              }}
-                              className="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors"
-                              title="Calculate Commission"
-                            >
-                              Calculate
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            disabled
-                            className="px-4 py-2 bg-gray-200 text-gray-500 text-xs font-semibold rounded cursor-not-allowed"
-                            title="Commission available after target is reached"
-                          >
-                            Target Not Reached
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900">{achievement.toFixed(1)}%</td>
-                      <td className="px-6 py-4 text-sm">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div 
-                            className={`h-2.5 rounded-full ${progressColor}`}
-                            style={{width: `${Math.min(achievement, 100)}%`}}
-                          ></div>
-                        </div>
-                      </td>
-                    </tr>
+                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">{perf.staffName}</td>
+                       <td className="px-6 py-4 text-sm text-gray-600">₹{parseFloat(perf.totalSales || 0).toLocaleString()}</td>
+                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">₹{parseFloat(perf.target || 0).toLocaleString()}</td>
+                       <td className="px-6 py-4 text-sm font-bold text-gray-900">{achievement.toFixed(1)}%</td>
+                       <td className="px-6 py-4 text-sm">
+                         <div className="w-full bg-gray-200 rounded-full h-2.5">
+                           <div 
+                             className={`h-2.5 rounded-full ${progressColor}`}
+                             style={{width: `${Math.min(achievement, 100)}%`}}
+                           ></div>
+                         </div>
+                       </td>
+                     </tr>
                   );
                 })}
               </tbody>

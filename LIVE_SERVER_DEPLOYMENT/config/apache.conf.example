@@ -1,0 +1,229 @@
+# ============================================================================
+# Apache Configuration Example - Salon Management System
+# ============================================================================
+# Location: /etc/apache2/sites-available/ansira.conf
+# Enable: a2ensite ansira
+# Enable modules: a2enmod rewrite ssl headers
+# Test: apache2ctl configtest
+# Restart: systemctl restart apache2
+# ============================================================================
+
+<VirtualHost *:80>
+    ServerName yourdomain.com
+    ServerAlias www.yourdomain.com
+    
+    # Redirect all HTTP to HTTPS
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+
+# ============================================================================
+# HTTPS Virtual Host
+# ============================================================================
+<VirtualHost *:443>
+    # ========================================================================
+    # Server Identity
+    # ========================================================================
+    ServerName yourdomain.com
+    ServerAlias www.yourdomain.com
+    ServerAdmin admin@yourdomain.com
+    
+    # ========================================================================
+    # Document Root
+    # ========================================================================
+    DocumentRoot /var/www/ansira
+    
+    # ========================================================================
+    # SSL/TLS Configuration
+    # ========================================================================
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/yourdomain.com.crt
+    SSLCertificateKeyFile /etc/ssl/private/yourdomain.com.key
+    SSLCertificateChainFile /etc/ssl/certs/yourdomain.com.ca-bundle
+    
+    # Strong SSL settings
+    SSLProtocol TLSv1.2 TLSv1.3
+    SSLCipherSuite HIGH:!aNULL:!MD5
+    SSLHonorCipherOrder on
+    
+    # ========================================================================
+    # Logging
+    # ========================================================================
+    ErrorLog ${APACHE_LOG_DIR}/ansira_error.log
+    CustomLog ${APACHE_LOG_DIR}/ansira_access.log combined
+    LogLevel warn
+
+    # ========================================================================
+    # Security Headers
+    # ========================================================================
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "no-referrer-when-downgrade"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    
+    # ========================================================================
+    # Rewrite Rules (mod_rewrite required)
+    # ========================================================================
+    <Directory /var/www/ansira>
+        RewriteEngine On
+        
+        # Allow direct access to existing files
+        RewriteCond %{REQUEST_FILENAME} -f [OR]
+        RewriteCond %{REQUEST_FILENAME} -d
+        RewriteRule ^(.*)$ - [L]
+        
+        # Frontend: Route all requests to index.html
+        RewriteCond %{REQUEST_URI} !^/api/
+        RewriteRule ^(.*)$ index.html [L]
+        
+        # Backend: Route API requests to index.php
+        RewriteCond %{REQUEST_URI} ^/api/
+        RewriteRule ^api/(.*)$ index.php/$1 [L,QSA]
+    </Directory>
+
+    # ========================================================================
+    # Directory Configuration
+    # ========================================================================
+    <Directory /var/www/ansira>
+        AllowOverride All
+        Require all granted
+        
+        # Standard options
+        Options -Indexes -MultiViews +SymLinksIfOwnerMatch
+    </Directory>
+
+    # ========================================================================
+    # API Directory - PHP Handler
+    # ========================================================================
+    <Directory /var/www/ansira/api>
+        SetHandler application/x-httpd-php
+        Require all granted
+        
+        # Enable .htaccess
+        AllowOverride All
+    </Directory>
+
+    # ========================================================================
+    # Deny Access to Sensitive Directories
+    # ========================================================================
+    <FilesMatch "^\.(env|git|htaccess|editorconfig)$">
+        Require all denied
+    </FilesMatch>
+
+    <FilesMatch "(composer.lock|package-lock.json|yarn.lock|\.md)$">
+        Require all denied
+    </FilesMatch>
+
+    # ========================================================================
+    # Static Assets - Cache Configuration
+    # ========================================================================
+    <FilesMatch "\.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    <FilesMatch "\.html$">
+        Header set Cache-Control "public, max-age=300"
+    </FilesMatch>
+
+    # ========================================================================
+    # Gzip Compression (mod_deflate required)
+    # ========================================================================
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE text/html
+        AddOutputFilterByType DEFLATE text/plain
+        AddOutputFilterByType DEFLATE text/xml
+        AddOutputFilterByType DEFLATE text/css
+        AddOutputFilterByType DEFLATE text/javascript
+        AddOutputFilterByType DEFLATE application/javascript
+        AddOutputFilterByType DEFLATE application/json
+        AddOutputFilterByType DEFLATE image/svg+xml
+    </IfModule>
+
+    # ========================================================================
+    # PHP Configuration
+    # ========================================================================
+    <IfModule mod_php.c>
+        php_flag display_errors Off
+        php_flag log_errors On
+        php_value error_log /var/log/apache2/ansira_php_error.log
+        php_value upload_max_filesize 10M
+        php_value post_max_size 10M
+        php_value max_execution_time 300
+        php_value default_charset "UTF-8"
+    </IfModule>
+
+    # ========================================================================
+    # Performance - Keep-Alive
+    # ========================================================================
+    KeepAlive On
+    KeepAliveTimeout 5
+
+    # ========================================================================
+    # Request Size Limit
+    # ========================================================================
+    LimitRequestFieldSize 16380
+    LimitRequestFields 100
+
+</VirtualHost>
+
+# ============================================================================
+# Enable SSL Session Cache (Optional)
+# ============================================================================
+# SSLSessionCache "shmcb:/run/apache2/ssl_cache(512000)"
+# SSLSessionCacheTimeout 300
+
+# ============================================================================
+# INSTALLATION INSTRUCTIONS
+# ============================================================================
+# 1. Save as: /etc/apache2/sites-available/ansira.conf
+# 2. Replace yourdomain.com with your domain
+# 3. Update DocumentRoot to your installation path
+# 4. Update SSL certificate paths
+# 5. Enable site: a2ensite ansira
+# 6. Enable required modules:
+#    a2enmod rewrite
+#    a2enmod ssl
+#    a2enmod headers
+#    a2enmod deflate
+# 7. Test config: apache2ctl configtest
+# 8. Restart Apache: systemctl restart apache2
+
+# ============================================================================
+# REQUIRED APACHE MODULES
+# ============================================================================
+# mod_rewrite - URL rewriting
+# mod_ssl - SSL/TLS support
+# mod_headers - Header manipulation
+# mod_deflate - Gzip compression
+# mod_php - PHP handler (if using mod_php)
+
+# ============================================================================
+# VERIFY INSTALLATION
+# ============================================================================
+# 1. Check enabled mods: apache2ctl -M | grep rewrite
+# 2. Check config: apache2ctl configtest (should say "Syntax OK")
+# 3. Restart: systemctl restart apache2
+# 4. Check status: systemctl status apache2
+# 5. Test domain: https://yourdomain.com
+# 6. Check logs: tail -f /var/log/apache2/ansira_error.log
+
+# ============================================================================
+# COMMON ISSUES
+# ============================================================================
+# 404 on /api endpoints:
+#   - Check mod_rewrite is enabled: a2enmod rewrite
+#   - Check AllowOverride is set to All
+#   - Verify .htaccess in /api directory
+
+# PHP not executing:
+#   - Check PHP module is loaded: apache2ctl -M | grep php
+#   - Or check php-fpm is running if using mod_proxy_fcgi
+
+# SSL errors:
+#   - Verify certificate files exist
+#   - Check certificate matches domain
+#   - Run: openssl x509 -text -noout -in certificate.crt
+
+# ============================================================================

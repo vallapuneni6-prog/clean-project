@@ -32,14 +32,12 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
     // Form states
     const [templateForm, setTemplateForm] = useState({
         packageValue: '',
-        serviceValue: '',
-        outletId: ''
+        serviceValue: ''
     });
 
     const [sittingsForm, setSittingsForm] = useState({
         paidSittings: '',
-        freeSittings: '',
-        outletId: ''
+        freeSittings: ''
     });
 
     const { notifications, addNotification, removeNotification } = useNotification();
@@ -53,18 +51,6 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
         try {
             setLoading(true);
 
-            // Determine outlet ID for sittings packages filter
-            let outletId = '';
-            if (currentUser?.role === 'admin' && !isSuperAdmin && adminOutletIds.length > 0) {
-                outletId = adminOutletIds[0];
-            } else if (currentUser?.outletId) {
-                outletId = currentUser.outletId;
-            }
-
-            const sittingsPackagesUrl = outletId
-                ? `/api/sittings-packages?type=customer_packages&outletId=${outletId}`
-                : '/api/sittings-packages?type=customer_packages';
-
             const headers = {
                 'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
             };
@@ -74,16 +60,12 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                 fetch('/api/packages?type=customer_packages', { headers }),
                 fetch('/api/outlets', { headers }),
                 fetch('/api/sittings-packages?type=templates', { headers }),
-                fetch(sittingsPackagesUrl, { headers })
+                fetch('/api/sittings-packages?type=customer_packages', { headers })
             ]);
 
             if (templatesRes.ok) {
-                let templatesData = await templatesRes.json();
-                if (currentUser?.role === 'admin' && !isSuperAdmin) {
-                    templatesData = templatesData.filter((t: any) => !t.outletId || adminOutletIds.includes(t.outletId));
-                }
-                setTemplates(templatesData);
-            }
+                 setTemplates(await templatesRes.json());
+             }
 
             if (packagesRes.ok) {
                 let packagesData = await packagesRes.json();
@@ -97,12 +79,8 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             }
 
             if (sittingsTemplatesRes.ok) {
-                let sittingsData = await sittingsTemplatesRes.json();
-                if (currentUser?.role === 'admin' && !isSuperAdmin) {
-                    sittingsData = sittingsData.filter((t: any) => !t.outletId || adminOutletIds.includes(t.outletId));
-                }
-                setSittingsTemplates(sittingsData);
-            }
+                 setSittingsTemplates(await sittingsTemplatesRes.json());
+             }
 
             if (sittingsPackagesRes.ok) {
                 let sittingsPackagesData = await sittingsPackagesRes.json();
@@ -240,27 +218,18 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
         e.preventDefault();
 
         if (!templateForm.packageValue || !templateForm.serviceValue) {
-            addNotification('Please fill all fields', 'warning');
-            return;
-        }
+             addNotification('Please fill all fields', 'warning');
+             return;
+         }
 
-        if (!isSuperAdmin && !templateForm.outletId) {
-            addNotification('Please select an outlet', 'warning');
-            return;
-        }
+         const generatedName = `Pay ${parseFloat(templateForm.packageValue).toLocaleString()} Get ${parseFloat(templateForm.serviceValue).toLocaleString()}`;
 
-        const generatedName = `Pay ${parseFloat(templateForm.packageValue).toLocaleString()} Get ${parseFloat(templateForm.serviceValue).toLocaleString()}`;
-
-        const payload: any = {
-            action: 'create_template',
-            name: generatedName,
-            packageValue: parseFloat(templateForm.packageValue),
-            serviceValue: parseFloat(templateForm.serviceValue)
-        };
-
-        if (!isSuperAdmin && templateForm.outletId) {
-            payload.outletId = templateForm.outletId;
-        }
+         const payload: any = {
+             action: 'create_template',
+             name: generatedName,
+             packageValue: parseFloat(templateForm.packageValue),
+             serviceValue: parseFloat(templateForm.serviceValue)
+         };
 
         try {
             const response = await fetch('/api/packages', {
@@ -275,7 +244,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             if (response.ok) {
                 await loadData();
                 setShowTemplateModal(false);
-                setTemplateForm({ packageValue: '', serviceValue: '', outletId: '' });
+                setTemplateForm({ packageValue: '', serviceValue: '' });
                 addNotification('Template created successfully', 'success');
 
                 // Notify other components that templates were updated
@@ -329,11 +298,6 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             return;
         }
 
-        if (!isSuperAdmin && !sittingsForm.outletId) {
-            addNotification('Please select an outlet', 'warning');
-            return;
-        }
-
         const paidSittings = parseInt(sittingsForm.paidSittings);
         const freeSittings = parseInt(sittingsForm.freeSittings);
         const generatedName = `${paidSittings}+${freeSittings} Sittings`;
@@ -345,10 +309,6 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             freeSittings,
             serviceIds: []
         };
-
-        if (!isSuperAdmin && sittingsForm.outletId) {
-            payload.outletId = sittingsForm.outletId;
-        }
 
         try {
             const response = await fetch('/api/sittings-packages', {
@@ -363,7 +323,7 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
             if (response.ok) {
                 await loadData();
                 setShowSittingsModal(false);
-                setSittingsForm({ paidSittings: '', freeSittings: '', outletId: '' });
+                setSittingsForm({ paidSittings: '', freeSittings: '' });
                 addNotification('Sittings package created successfully', 'success');
 
                 // Notify other components that templates were updated
@@ -778,23 +738,6 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                                 />
                             </div>
 
-                            {!isSuperAdmin && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Select Outlet *</label>
-                                    <select
-                                        value={templateForm.outletId}
-                                        onChange={(e) => setTemplateForm({ ...templateForm, outletId: e.target.value })}
-                                        className="w-full bg-gray-100 text-gray-900 px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                        required
-                                    >
-                                        <option value="">Choose an outlet</option>
-                                        {outlets.map(outlet => (
-                                            <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
                             {templateForm.packageValue && templateForm.serviceValue && (
                                 <div className="bg-gray-100 rounded-lg p-4 text-center">
                                     <p className="text-gray-700 font-semibold">
@@ -855,23 +798,6 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                                     required
                                 />
                             </div>
-
-                            {!isSuperAdmin && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Select Outlet *</label>
-                                    <select
-                                        value={sittingsForm.outletId}
-                                        onChange={(e) => setSittingsForm({ ...sittingsForm, outletId: e.target.value })}
-                                        className="w-full bg-gray-100 text-gray-900 px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    >
-                                        <option value="">Choose an outlet</option>
-                                        {outlets.map(outlet => (
-                                            <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
 
                             {sittingsForm.paidSittings && sittingsForm.freeSittings && (
                                 <div className="bg-blue-50 rounded-lg p-4 text-center">

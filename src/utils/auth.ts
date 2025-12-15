@@ -20,7 +20,6 @@ export function decodeToken(token: string): any {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) {
-      console.error('[Auth] Invalid token format - expected 3 parts');
       return null;
     }
 
@@ -29,10 +28,8 @@ export function decodeToken(token: string): any {
       atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
     );
     
-    console.log('[Auth] Token decoded successfully', { user_id: decoded.user_id });
     return decoded;
   } catch (error) {
-    console.error('[Auth] Failed to decode token:', error);
     return null;
   }
 }
@@ -41,13 +38,7 @@ export function decodeToken(token: string): any {
  * Get stored auth token
  */
 export function getToken(): string | null {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    console.log(`[Auth] Token retrieved from storage: ${token.substring(0, 20)}...`);
-  } else {
-    console.warn('[Auth] No token found in storage');
-  }
-  return token;
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 /**
@@ -59,7 +50,6 @@ export function setToken(token: string, expiresIn?: number): void {
   if (expiresIn) {
     const expiry = Date.now() + expiresIn * 1000;
     localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString());
-    console.log(`[Auth] Token stored with expiry: ${new Date(expiry).toISOString()}`);
   } else {
     localStorage.removeItem(TOKEN_EXPIRY_KEY);
   }
@@ -79,7 +69,6 @@ export function clearToken(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(TOKEN_EXPIRY_KEY);
   localStorage.removeItem(USER_DATA_KEY);
-  console.log('[Auth] Token cleared from storage');
 }
 
 /**
@@ -88,13 +77,11 @@ export function clearToken(): void {
 export function isTokenValid(): boolean {
   const token = getToken();
   if (!token) {
-    console.warn('[Auth] No token found');
     return false;
   }
 
   const decoded = decodeToken(token);
   if (!decoded) {
-    console.error('[Auth] Failed to decode token');
     return false;
   }
 
@@ -104,16 +91,8 @@ export function isTokenValid(): boolean {
     const now = Date.now();
     
     if (expiryTime < now) {
-      console.warn('[Auth] Token has expired', { 
-        expiry: new Date(expiryTime).toISOString(),
-        now: new Date(now).toISOString()
-      });
       return false;
     }
-    
-    console.log('[Auth] Token is valid', {
-      expiresIn: Math.round((expiryTime - now) / 1000) + 's'
-    });
   }
 
   return true;
@@ -131,15 +110,7 @@ export function shouldRefreshToken(): boolean {
 
   const expiryTime = decoded.exp * 1000;
   const timeLeft = expiryTime - Date.now();
-  const shouldRefresh = timeLeft < REFRESH_THRESHOLD;
-
-  if (shouldRefresh) {
-    console.log('[Auth] Token expiring soon - should refresh', {
-      timeLeft: Math.round(timeLeft / 1000) + 's'
-    });
-  }
-
-  return shouldRefresh;
+  return timeLeft < REFRESH_THRESHOLD;
 }
 
 /**
@@ -149,11 +120,9 @@ export function getCurrentUser(): any {
   const userDataStr = localStorage.getItem(USER_DATA_KEY);
   if (userDataStr) {
     try {
-      const userData = JSON.parse(userDataStr);
-      console.log('[Auth] User data retrieved from storage', { user_id: userData.user_id });
-      return userData;
+      return JSON.parse(userDataStr);
     } catch (error) {
-      console.error('[Auth] Failed to parse user data:', error);
+      // Fall through to token decoding
     }
   }
 
@@ -177,9 +146,6 @@ export function getAuthHeaders(): HeadersInit {
   const token = getToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
-    console.log(`[Auth] Authorization header set with token: ${token.substring(0, 20)}...`);
-  } else {
-    console.warn('[Auth] No token available for Authorization header');
   }
 
   return headers;
@@ -225,7 +191,6 @@ export function getTokenInfo(): any {
  * Handle 401 unauthorized response
  */
 export function handleUnauthorized(): void {
-  console.error('[Auth] Received 401 Unauthorized - clearing token');
   clearToken();
   window.location.href = '/login';
 }
@@ -234,7 +199,6 @@ export function handleUnauthorized(): void {
  * Handle token refresh (when server sends new token in response)
  */
 export function handleTokenRefresh(newToken: string, expiresIn?: number): void {
-  console.log('[Auth] Refreshing token from server response');
   setToken(newToken, expiresIn);
 }
 
@@ -253,7 +217,6 @@ export function extractTokenFromResponse(response: Response): string | null {
   // Extract Bearer token
   const match = authHeader.match(/Bearer\s+(.+)/i);
   if (match) {
-    console.log('[Auth] Extracted token from response header');
     return match[1];
   }
 
@@ -275,8 +238,6 @@ export async function authenticatedFetch(
     headers.set(key, value as string);
   });
 
-  console.log(`[Auth] Making authenticated request to ${url}`);
-
   const response = await fetch(url, {
     ...options,
     headers
@@ -290,7 +251,6 @@ export async function authenticatedFetch(
 
   // Handle 401 responses
   if (response.status === 401) {
-    console.error('[Auth] Request returned 401 - user unauthorized');
     handleUnauthorized();
     throw new Error('Unauthorized: Please log in again');
   }
@@ -302,18 +262,14 @@ export async function authenticatedFetch(
  * Login handler - stores token and user data
  */
 export function handleLogin(token: string, expiresIn?: number): void {
-  console.log('[Auth] Login successful - storing token');
   setToken(token, expiresIn);
-  console.log('[Auth] Token info:', getTokenInfo());
 }
 
 /**
  * Logout handler - clears all auth data
  */
 export function handleLogout(): void {
-  console.log('[Auth] Logout initiated');
   clearToken();
-  console.log('[Auth] Auth data cleared');
 }
 
 /**
@@ -321,29 +277,24 @@ export function handleLogout(): void {
  */
 export function validateTokenFormat(token: string): boolean {
   if (!token || typeof token !== 'string') {
-    console.error('[Auth] Token is not a string');
     return false;
   }
 
   if (!token.includes('.')) {
-    console.error('[Auth] Token does not contain dot separators');
     return false;
   }
 
   const parts = token.split('.');
   if (parts.length !== 3) {
-    console.error('[Auth] Token does not have 3 parts');
     return false;
   }
 
   // Check if parts are valid base64
   for (let i = 0; i < parts.length; i++) {
     if (!/^[A-Za-z0-9_-]+$/.test(parts[i])) {
-      console.error(`[Auth] Token part ${i} contains invalid characters`);
       return false;
     }
   }
 
-  console.log('[Auth] Token format is valid');
   return true;
 }

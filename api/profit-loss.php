@@ -23,7 +23,6 @@ try {
     $user = verifyAuthorization(true); // This will exit if not authorized
 
     if (!$user || !isset($user['user_id'])) {
-        error_log('Profit & Loss API - Invalid user data or no user_id');
         sendResponse(['error' => 'Unauthorized'], 401);
         exit;
     }
@@ -31,8 +30,6 @@ try {
     $method = $_SERVER['REQUEST_METHOD'];
 
     if ($method === 'GET') {
-        error_log('Profit & Loss API - GET request received');
-        
         $outletId = $_GET['outletId'] ?? null;
         $month = $_GET['month'] ?? date('Y-m');
 
@@ -187,28 +184,25 @@ try {
                     $salaries += max(0, $salaryToCredit); // Only add positive amounts
                 }
             } catch (Exception $e) {
-                error_log('Payroll calculation error: ' . $e->getMessage());
                 // If there's an error calculating payroll, just use 0
                 $salaries = 0;
                 $incentives = 0;
             }
 
-            // Get outlet expenses for the month (if table exists)
-            $outletExpenses = 0;
-            try {
-                $stmt = $pdo->prepare("
-                    SELECT COALESCE(SUM(oe.amount), 0) as total
-                    FROM outlet_expenses oe
-                    WHERE oe.outlet_id = ? AND DATE(oe.expense_date) BETWEEN ? AND ?
-                ");
-                $stmt->execute([$outletId, $startDate, $endDate]);
-                $outletExpensesData = $stmt->fetch();
-                $outletExpenses = floatval($outletExpensesData['total'] ?? 0);
-            } catch (Exception $e) {
-                error_log('Outlet expenses table might not exist: ' . $e->getMessage());
-                // Table might not exist yet, that's okay
-                $outletExpenses = 0;
-            }
+            // Get outlet expenses from daily expenses for the month
+             $outletExpenses = 0;
+             try {
+                 $stmt = $pdo->prepare("
+                     SELECT COALESCE(SUM(expense_amount), 0) as total
+                     FROM daily_expenses
+                     WHERE outlet_id = ? AND expense_date BETWEEN ? AND ?
+                 ");
+                 $stmt->execute([$outletId, $startDate, $endDate]);
+                 $outletExpensesData = $stmt->fetch();
+                 $outletExpenses = floatval($outletExpensesData['total'] ?? 0);
+             } catch (Exception $e) {
+                 $outletExpenses = 0;
+             }
 
             // Get or create P&L record
             $plRecord = null;
@@ -220,7 +214,6 @@ try {
                 $stmt->execute([$outletId, $month]);
                 $plRecord = $stmt->fetch(PDO::FETCH_ASSOC);
             } catch (Exception $e) {
-                error_log('Profit & Loss table might not exist: ' . $e->getMessage());
                 // Table doesn't exist yet, will create on insert
             }
 
@@ -247,7 +240,7 @@ try {
             sendResponse($response);
         } catch (Exception $e) {
             error_log('Profit & Loss GET error: ' . $e->getMessage());
-            sendResponse(['error' => 'Failed to fetch P&L data', 'details' => $e->getMessage()], 500);
+            sendResponse(['error' => 'Failed to fetch P&L data'], 500);
         }
     } elseif ($method === 'POST') {
         // Update P&L record
@@ -351,7 +344,7 @@ try {
             sendResponse(['message' => 'P&L record updated successfully'], 200);
         } catch (Exception $e) {
             error_log('Profit & Loss POST error: ' . $e->getMessage());
-            sendResponse(['error' => 'Failed to update P&L record', 'details' => $e->getMessage()], 500);
+            sendResponse(['error' => 'Failed to update P&L record'], 500);
         }
     } else {
         sendResponse(['error' => 'Method not allowed'], 405);
@@ -359,17 +352,14 @@ try {
 
 } catch (Exception $e) {
     $errorMsg = $e->getMessage();
-    $errorTrace = $e->getTraceAsString();
     
     error_log('Profit & Loss API Fatal Error: ' . $errorMsg);
-    error_log('Profit & Loss API Trace: ' . $errorTrace);
     
     ob_clean();
     header('Content-Type: application/json; charset=utf-8');
     http_response_code(500);
     echo json_encode([
-        'error' => 'A fatal error occurred',
-        'message' => $errorMsg
+        'error' => 'A fatal error occurred'
     ]);
 }
 

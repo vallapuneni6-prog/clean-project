@@ -4,52 +4,92 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/package_invoices_error.log');
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
 require_once 'helpers/auth.php';
 
-// Start session before checking authorization
+// Configure session to work with CORS
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
     session_start();
 }
 
+// CORS headers
 header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Credentials: true');
+
+// Handle preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 try {
+    // Verify authorization
+    $user = verifyAuthorization(true);
+    $currentUserId = $user['user_id'];
+    
     $pdo = getDBConnection();
     
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        // Verify authorization
-        $user = verifyAuthorization(true);
-        
-        // Get all package invoices or filter by outlet
-        $outletId = $_GET['outletId'] ?? null;
-        
-        $sql = "SELECT pi.*, 
-                       u.username as created_by_username,
-                       o.name as outlet_name,
-                       o.code as outlet_code,
-                       pt.name as package_name,
-                       cp.customer_name
-                FROM package_invoices pi
-                LEFT JOIN users u ON pi.user_id = u.id
-                LEFT JOIN outlets o ON pi.outlet_id = o.id
-                LEFT JOIN package_templates pt ON pi.package_template_id = pt.id
-                LEFT JOIN customer_packages cp ON pi.customer_package_id = cp.id";
-        
-        if ($outletId && $outletId !== 'all') {
-            $sql .= " WHERE pi.outlet_id = :outletId";
-        }
-        
-        $sql .= " ORDER BY pi.created_at DESC";
-        
-        $stmt = $pdo->prepare($sql);
-        if ($outletId && $outletId !== 'all') {
-            $stmt->execute([':outletId' => $outletId]);
-        } else {
-            $stmt->execute();
-        }
+    // Fetch user info from database (more reliable than JWT)
+    $userStmt = $pdo->prepare("SELECT role, is_super_admin FROM users WHERE id = ?");
+    $userStmt->execute([$currentUserId]);
+    $userRow = $userStmt->fetch();
+    
+    if (!$userRow) {
+        sendError('User not found', 404);
+        exit;
+    }
+    
+    $userRole = $userRow['role'];
+    $isSuperAdmin = (bool)$userRow['is_super_admin'];
+     
+     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+         
+         // Get all package invoices or filter by outlet
+         // Admins see all package invoices, regular users see only invoices from their assigned outlets
+         if ($isSuperAdmin || $userRole === 'admin') {
+             // Admin: see all package invoices
+             $sql = "SELECT pi.*, 
+                            u.username as created_by_username,
+                            o.name as outlet_name,
+                            o.code as outlet_code,
+                            pt.name as package_name,
+                            cp.customer_name
+                     FROM package_invoices pi
+                     LEFT JOIN users u ON pi.user_id = u.id
+                     LEFT JOIN outlets o ON pi.outlet_id = o.id
+                     LEFT JOIN package_templates pt ON pi.package_template_id = pt.id
+                     LEFT JOIN customer_packages cp ON pi.customer_package_id = cp.id
+                     ORDER BY pi.created_at DESC";
+             $stmt = $pdo->prepare($sql);
+             $stmt->execute();
+         } else {
+             // Regular user: see only package invoices from their assigned outlets
+             $sql = "SELECT pi.*, 
+                            u.username as created_by_username,
+                            o.name as outlet_name,
+                            o.code as outlet_code,
+                            pt.name as package_name,
+                            cp.customer_name
+                     FROM package_invoices pi
+                     LEFT JOIN users u ON pi.user_id = u.id
+                     LEFT JOIN outlets o ON pi.outlet_id = o.id
+                     LEFT JOIN package_templates pt ON pi.package_template_id = pt.id
+                     LEFT JOIN customer_packages cp ON pi.customer_package_id = cp.id
+                     INNER JOIN user_outlets uo ON pi.outlet_id = uo.outlet_id
+                     WHERE uo.user_id = :userId
+                     ORDER BY pi.created_at DESC";
+             $stmt = $pdo->prepare($sql);
+             $stmt->execute(['userId' => $currentUserId]);
+         }
         
         $invoices = $stmt->fetchAll();
         

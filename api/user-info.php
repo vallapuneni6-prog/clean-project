@@ -1,11 +1,20 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/user_info_error.log');
 
-session_start();
+// Configure session to work with CORS
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
+    session_start();
+}
 
 require_once 'config/database.php';
 require_once 'helpers/functions.php';
+require_once 'helpers/auth.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
@@ -34,6 +43,12 @@ try {
             $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
         }
         
+        // Also check for custom header via getallheaders
+        if (!$authHeader && function_exists('getallheaders')) {
+            $headers = getallheaders();
+            $authHeader = $headers['Authorization'] ?? '';
+        }
+        
         if (!$authHeader || !preg_match('/Bearer\s+(.+)/', $authHeader, $matches)) {
             http_response_code(401);
             sendError('Not authenticated', 401);
@@ -41,26 +56,20 @@ try {
         
         $token = $matches[1];
         
-        // Verify JWT token (simple verification without external library)
-        $secretKey = getenv('JWT_SECRET') ?: 'your-secret-key-here';
-        
-        // Decode JWT
-        $parts = explode('.', $token);
-        if (count($parts) !== 3) {
-            http_response_code(401);
-            sendError('Invalid token format', 401);
-        }
-        
-        // Decode payload
-        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+        // Use the centralized JWT validation function
+        $payload = validateJWTToken($token);
         
         if (!$payload || !isset($payload['user_id'])) {
             http_response_code(401);
-            sendError('Invalid token payload', 401);
+            sendError('Invalid token', 401);
         }
         
         $userId = $payload['user_id'];
-        $isSuperAdmin = (bool)($payload['is_super_admin'] ?? false);
+        
+        // Store in session for future requests
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['email'] = $payload['email'] ?? null;
+        $_SESSION['role'] = $payload['role'] ?? null;
     }
     
     // Get user from database with creator info

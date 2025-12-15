@@ -23,10 +23,7 @@ try {
     $pdo = getDBConnection();
     $user = verifyAuthorization(true); // This will exit if not authorized
 
-    error_log('Expenses API - User data from verifyAuthorization: ' . json_encode($user));
-
     if (!$user || !isset($user['user_id'])) {
-        error_log('Expenses API - Invalid user data or no user_id');
         sendResponse(['error' => 'Unauthorized'], 401);
         exit;
     }
@@ -34,36 +31,22 @@ try {
     // Map user data to match expected format
     $userId = $user['user_id'] ?? $user['id'] ?? null;
     if (!$userId) {
-        error_log('Expenses API - Could not get userId from user data');
         sendResponse(['error' => 'Invalid user data'], 401);
         exit;
     }
-    
-    error_log('Expenses API - Using userId: ' . $userId);
 
     // Ensure the expenses table exists
     try {
         runAllMigrations($pdo);
-        
-        // Verify table structure
-        $stmt = $pdo->query("DESCRIBE daily_expenses");
-        $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-        error_log('daily_expenses columns: ' . json_encode($columns));
     } catch (Exception $e) {
-        error_log('Migration error: ' . $e->getMessage());
-        error_log('Migration trace: ' . $e->getTraceAsString());
         // Continue anyway, table might exist
     }
 
     $method = $_SERVER['REQUEST_METHOD'];
 
-    error_log('Expenses API - Method: ' . $method);
-
     if ($method === 'GET') {
-        error_log('Expenses API - GET request received');
         // Fetch expenses for the outlet
         $outletId = $_GET['outletId'] ?? $user['outlet_id'] ?? $user['outletId'] ?? null;
-        error_log('Expenses API - Initial outletId: ' . ($outletId ? $outletId : 'NOT SET'));
 
         // If no outlet in user data, try to get from user_outlets table
         if (!$outletId && isset($user['user_id'])) {
@@ -80,7 +63,6 @@ try {
                     $outletId = $userOutlet['outlet_id'];
                 }
             } catch (Exception $queryError) {
-                error_log('Error querying user_outlets: ' . $queryError->getMessage());
                 // Continue without outlet from table, will fail below if still no outlet
             }
         }
@@ -125,7 +107,7 @@ try {
             sendResponse($expenses);
         } catch (Exception $e) {
             error_log('Expenses GET error: ' . $e->getMessage());
-            sendResponse(['error' => 'Failed to fetch expenses', 'details' => $e->getMessage()], 500);
+            sendResponse(['error' => 'Failed to fetch expenses'], 500);
         }
     } elseif ($method === 'POST') {
         // Add new expense
@@ -177,11 +159,10 @@ try {
                         $openingBalance = (float)$lastExpense['closing_balance'];
                     } else {
                         $openingBalance = 0;
-                    }
-                } catch (Exception $e) {
-                    error_log('Error fetching yesterday closing balance: ' . $e->getMessage());
-                    $openingBalance = 0;
-                }
+                        }
+                        } catch (Exception $e) {
+                        $openingBalance = 0;
+                        }
             }
             $cashReceivedToday = isset($data['cashReceivedToday']) ? (float)$data['cashReceivedToday'] : 0;
             $expenseAmount = isset($data['expenseAmount']) ? (float)$data['expenseAmount'] : 0;
@@ -225,7 +206,7 @@ try {
             ], 201);
         } catch (Exception $e) {
             error_log('Expenses POST error: ' . $e->getMessage());
-            sendResponse(['error' => 'Failed to add expense', 'details' => $e->getMessage()], 500);
+            sendResponse(['error' => 'Failed to add expense'], 500);
         }
     } else {
         sendResponse(['error' => 'Method not allowed'], 405);
@@ -233,19 +214,15 @@ try {
 
 } catch (Exception $e) {
     $errorMsg = $e->getMessage();
-    $errorTrace = $e->getTraceAsString();
     
     error_log('Expenses API Fatal Error: ' . $errorMsg);
-    error_log('Expenses API Trace: ' . $errorTrace);
     
     // Clear any buffered output before sending JSON
     ob_clean();
     header('Content-Type: application/json; charset=utf-8');
     http_response_code(500);
     echo json_encode([
-        'error' => 'A fatal error occurred',
-        'message' => $errorMsg,
-        'trace' => $errorTrace
+        'error' => 'A fatal error occurred'
     ]);
 }
 

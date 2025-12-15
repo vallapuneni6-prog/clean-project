@@ -1,7 +1,18 @@
 import { CustomerPackage, PackageTemplate, Outlet, ServiceRecord, CustomerSittingsPackage, SittingsPackage } from '../types';
 import html2canvas from 'html2canvas';
 
-export const generateBrandedPackageInvoiceImage = async (customerPackage: CustomerPackage, template: PackageTemplate, outlet: Outlet, initialServices: ServiceRecord[]): Promise<string> => {
+export const generateBrandedPackageInvoiceImage = async (
+    customerPackage: CustomerPackage,
+    template: PackageTemplate,
+    outlet: Outlet,
+    initialServices: ServiceRecord[],
+    balanceProgression?: Array<{
+        serviceName: string;
+        previousBalance: number;
+        deductionAmount: number;
+        remainingBalance: number;
+    }>
+): Promise<string> => {
     try {
         // Load logo as data URL
         let logoDataUrl = '';
@@ -100,6 +111,29 @@ export const generateBrandedPackageInvoiceImage = async (customerPackage: Custom
                         <td style="text-align: right; padding: 6px 0;">₹${customerPackage.remainingServiceValue.toFixed(2)}</td>
                     </tr>
                 </table>
+
+                ${balanceProgression && balanceProgression.length > 0 ? `
+                <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+                
+                <div style="text-align: center; font-weight: bold; font-size: 11px; margin: 8px 0;">BALANCE PROGRESSION</div>
+                
+                <table style="width: 100%; margin: 6px 0; border-collapse: collapse; font-size: 10px;">
+                    <tr>
+                        <td style="padding: 2px 2px; text-align: left; font-weight: bold; border-bottom: 1px solid #000; width: 40%;">Service</td>
+                        <td style="padding: 2px 2px; text-align: right; font-weight: bold; border-bottom: 1px solid #000; width: 20%;">Previous</td>
+                        <td style="padding: 2px 2px; text-align: right; font-weight: bold; border-bottom: 1px solid #000; width: 20%;">Deducted</td>
+                        <td style="padding: 2px 2px; text-align: right; font-weight: bold; border-bottom: 1px solid #000; width: 20%;">Remaining</td>
+                    </tr>
+                    ${balanceProgression.map(item => `
+                    <tr>
+                        <td style="padding: 2px 2px; text-align: left; font-size: 9px;">${item.serviceName}</td>
+                        <td style="padding: 2px 2px; text-align: right; font-size: 9px;">₹${item.previousBalance.toFixed(2)}</td>
+                        <td style="padding: 2px 2px; text-align: right; font-size: 9px; color: #c00;">-₹${item.deductionAmount.toFixed(2)}</td>
+                        <td style="padding: 2px 2px; text-align: right; font-size: 9px; color: #060; font-weight: bold;">₹${item.remainingBalance.toFixed(2)}</td>
+                    </tr>
+                    `).join('')}
+                </table>
+                ` : ''}
                 
                 <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
                 

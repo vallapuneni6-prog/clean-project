@@ -43,6 +43,7 @@ function App() {
     if (token) {
       // Try to fetch user info from session-based auth endpoint
       fetch('/api/user-info', {
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${token}`
         }

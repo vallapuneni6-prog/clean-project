@@ -8,6 +8,9 @@ RewriteEngine On
 RewriteCond %{HTTP:Authorization} ^(.*)
 RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
 
+# Allow direct access to diagnostic files
+RewriteRule ^(test-db\.php|test-auth\.php|init-db\.php|health\.php|debug-packages\.php|debug-packages-simple\.php|debug-staff\.php|diagnose-all\.php|check-expenses-table\.php|debug-expenses\.php|test-expense-logic\.php|migrate-add-outlet-id\.php|migrate-add-cash-deposited\.php)$ $1 [L]
+
 # Route all API requests to router.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

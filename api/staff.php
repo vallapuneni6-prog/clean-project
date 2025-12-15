@@ -70,54 +70,73 @@ try {
     }
     
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $action = $_GET['action'] ?? '';
-        
-        if ($action === 'sales') {
-            // Get staff sales performance
-            $outletId = $_GET['outletId'] ?? null;
-            
-            // Get regular invoice sales (100% service value)
-            $sql1 = "SELECT s.*, 
-                           COALESCE(SUM(ii.amount), 0) as total_sales
-                    FROM staff s
-                    LEFT JOIN invoice_items ii ON s.name = ii.staff_name
-                    LEFT JOIN invoices inv ON ii.invoice_id = inv.id
-                    WHERE s.active = 1";
-            
-            if ($outletId && $outletId !== 'all') {
-                $sql1 .= " AND s.outlet_id = :outletId";
-            }
-            
-            $sql1 .= " GROUP BY s.id";
-            
-            $stmt1 = $pdo->prepare($sql1);
-            if ($outletId && $outletId !== 'all') {
-                $stmt1->execute(['outletId' => $outletId]);
-            } else {
-                $stmt1->execute();
-            }
-            
-            $staffSales = $stmt1->fetchAll();
-            
-            // Get package service sales (60% of service value)
-            $sql2 = "SELECT s.name, 
-                           COALESCE(SUM(sr.service_value * 0.6), 0) as package_sales
-                    FROM staff s
-                    LEFT JOIN service_records sr ON s.name = sr.staff_name
-                    WHERE s.active = 1";
-            
-            if ($outletId && $outletId !== 'all') {
-                $sql2 .= " AND s.outlet_id = :outletId";
-            }
-            
-            $sql2 .= " GROUP BY s.name";
-            
-            $stmt2 = $pdo->prepare($sql2);
-            if ($outletId && $outletId !== 'all') {
-                $stmt2->execute(['outletId' => $outletId]);
-            } else {
-                $stmt2->execute();
-            }
+         $action = $_GET['action'] ?? '';
+         
+         if ($action === 'sales') {
+             // Get staff sales performance
+             // Access: Users and Admins can view
+             $requestedOutletId = $_GET['outletId'] ?? null;
+             
+             // Get user role and outlet
+             $userStmt = $pdo->prepare("SELECT role, outlet_id FROM users WHERE id = :userId");
+             $userStmt->execute(['userId' => $userId]);
+             $userRole = $userStmt->fetch();
+             
+             if (!$userRole) {
+                 sendError('User not found', 404);
+             }
+             
+             // Get user's assigned outlets
+             $userOutletIds = [];
+             if (!empty($userRole['outlet_id'])) {
+                 $userOutletIds[] = $userRole['outlet_id'];
+             }
+             
+             // Also check user_outlets table for multi-outlet access
+             $outletStmt = $pdo->prepare("SELECT outlet_id FROM user_outlets WHERE user_id = :userId");
+             $outletStmt->execute(['userId' => $userId]);
+             $outlets = $outletStmt->fetchAll(PDO::FETCH_COLUMN, 0);
+             $userOutletIds = array_merge($userOutletIds, $outlets);
+             $userOutletIds = array_unique($userOutletIds);
+             
+             if (empty($userOutletIds)) {
+                 sendError('User has no assigned outlets', 403);
+             }
+             
+             // Determine which outlet(s) to query
+             $queryOutletIds = $userOutletIds;
+             if ($requestedOutletId && $requestedOutletId !== 'all') {
+                 // User can filter to a specific outlet only if they have access to it
+                 if (!in_array($requestedOutletId, $userOutletIds)) {
+                     sendError('You do not have access to this outlet', 403);
+                 }
+                 $queryOutletIds = [$requestedOutletId];
+             }
+             
+             // Get regular invoice sales (100% service value)
+             $sql1 = "SELECT s.*, 
+                            COALESCE(SUM(ii.amount), 0) as total_sales
+                     FROM staff s
+                     LEFT JOIN invoice_items ii ON s.name = ii.staff_name
+                     LEFT JOIN invoices inv ON ii.invoice_id = inv.id
+                     WHERE s.active = 1 AND s.outlet_id IN (" . implode(',', array_fill(0, count($queryOutletIds), '?')) . ")
+                     GROUP BY s.id";
+             
+             $stmt1 = $pdo->prepare($sql1);
+             $stmt1->execute($queryOutletIds);
+             
+             $staffSales = $stmt1->fetchAll();
+             
+             // Get package service sales (60% of service value)
+             $sql2 = "SELECT s.name, 
+                            COALESCE(SUM(sr.service_value * 0.6), 0) as package_sales
+                     FROM staff s
+                     LEFT JOIN service_records sr ON s.name = sr.staff_name
+                     WHERE s.active = 1 AND s.outlet_id IN (" . implode(',', array_fill(0, count($queryOutletIds), '?')) . ")
+                     GROUP BY s.name";
+             
+             $stmt2 = $pdo->prepare($sql2);
+             $stmt2->execute($queryOutletIds);
             
             $packageSales = $stmt2->fetchAll();
             
@@ -127,38 +146,25 @@ try {
                 $packageSalesMap[$ps['name']] = (float)$ps['package_sales'];
             }
             
-            // Combine regular sales and package sales with commission calculation
-            $staffSales = array_map(function($s) use ($packageSalesMap) {
-                $regularSales = (float)$s['total_sales'];
-                $packagedSales = $packageSalesMap[$s['name']] ?? 0;
-                $totalSales = $regularSales + $packagedSales;
-                $target = (float)$s['target'];
-                $achievedPercentage = $target > 0 ? ($totalSales / $target) * 100 : 0;
-                
-                // Commission calculation:
-                // Only if they reach their target (100%)
-                // 5% commission on target value + 10% commission on sales above target
-                $commission = 0;
-                if ($totalSales >= $target && $target > 0) {
-                    // 5% on target value
-                    $commission += ($target * 0.05);
-                    // 10% on amount above target
-                    $commission += (($totalSales - $target) * 0.10);
-                }
-                
-                return [
-                    'id' => $s['id'],
-                    'name' => $s['name'],
-                    'outletId' => $s['outlet_id'],
-                    'salary' => (float)$s['salary'],
-                    'joiningDate' => $s['joining_date'],
-                    'target' => $target,
-                    'totalSales' => $totalSales,
-                    'achievedPercentage' => round($achievedPercentage, 2),
-                    'commission' => round($commission, 2),
-                    'reachedTarget' => $totalSales >= $target
-                ];
-            }, $staffSales);
+            // Combine regular sales and package sales
+             $staffSales = array_map(function($s) use ($packageSalesMap) {
+                 $regularSales = (float)$s['total_sales'];
+                 $packagedSales = $packageSalesMap[$s['name']] ?? 0;
+                 $totalSales = $regularSales + $packagedSales;
+                 $target = (float)$s['target'];
+                 $achievedPercentage = $target > 0 ? ($totalSales / $target) * 100 : 0;
+                 
+                 return [
+                     'id' => $s['id'],
+                     'name' => $s['name'],
+                     'outletId' => $s['outlet_id'],
+                     'salary' => (float)$s['salary'],
+                     'joiningDate' => $s['joining_date'],
+                     'target' => $target,
+                     'totalSales' => $totalSales,
+                     'achievedPercentage' => round($achievedPercentage, 2)
+                 ];
+             }, $staffSales);
             
             // Sort by total sales descending
             usort($staffSales, function($a, $b) {
@@ -170,22 +176,52 @@ try {
         }
         
         // Get all staff or filter by outlet
-        $outletId = $_GET['outletId'] ?? null;
-        
-        $sql = "SELECT * FROM staff";
-        $params = [];
-        
-        if ($outletId && $outletId !== 'all') {
-            $sql .= " WHERE outlet_id = :outletId";
-            $params['outletId'] = $outletId;
-        }
-        
-        $sql .= " ORDER BY name ASC";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        
-        $staff = $stmt->fetchAll();
+         // Access: Users can manage staff, Admins can view staff
+         $requestedOutletId = $_GET['outletId'] ?? null;
+         
+         // Get user role and outlet
+         $userStmt = $pdo->prepare("SELECT role, outlet_id FROM users WHERE id = :userId");
+         $userStmt->execute(['userId' => $userId]);
+         $userRole = $userStmt->fetch();
+         
+         if (!$userRole) {
+             sendError('User not found', 404);
+         }
+         
+         // Get user's assigned outlets
+         $userOutletIds = [];
+         if (!empty($userRole['outlet_id'])) {
+             $userOutletIds[] = $userRole['outlet_id'];
+         }
+         
+         // Also check user_outlets table for multi-outlet access
+         $outletStmt = $pdo->prepare("SELECT outlet_id FROM user_outlets WHERE user_id = :userId");
+         $outletStmt->execute(['userId' => $userId]);
+         $outlets = $outletStmt->fetchAll(PDO::FETCH_COLUMN, 0);
+         $userOutletIds = array_merge($userOutletIds, $outlets);
+         $userOutletIds = array_unique($userOutletIds);
+         
+         if (empty($userOutletIds)) {
+             sendError('User has no assigned outlets', 403);
+         }
+         
+         // Determine which outlet(s) to query
+         $queryOutletIds = $userOutletIds;
+         if ($requestedOutletId && $requestedOutletId !== 'all') {
+             // User can filter to a specific outlet only if they have access to it
+             if (!in_array($requestedOutletId, $userOutletIds)) {
+                 sendError('You do not have access to this outlet', 403);
+             }
+             $queryOutletIds = [$requestedOutletId];
+         }
+         
+         // Build the query with outlet-based access control
+         $sql = "SELECT * FROM staff WHERE outlet_id IN (" . implode(',', array_fill(0, count($queryOutletIds), '?')) . ") ORDER BY name ASC";
+         
+         $stmt = $pdo->prepare($sql);
+         $stmt->execute($queryOutletIds);
+         
+         $staff = $stmt->fetchAll();
         
         // Convert to camelCase
         $staff = array_map(function($s) {

@@ -8,82 +8,229 @@ require_once 'config/database.php';
 require_once 'helpers/functions.php';
 require_once 'helpers/auth.php';
 
-// Start session and verify authorization
+// Configure session to work with CORS
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
     session_start();
 }
 
-$user = verifyAuthorization(true);
+// Set error handler to catch all PHP errors
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    error_log("PHP Error [$errno]: $errstr in $errfile:$errline");
+    throw new ErrorException("[$errno] $errstr in $errfile:$errline", 0, $errno, $errfile, $errline);
+});
 
 try {
-    $pdo = getDBConnection();
-    
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $type = $_GET['type'] ?? 'templates';
-        
-        if ($type === 'templates') {
-            // Get all package templates
-            try {
-                $stmt = $pdo->query("SELECT * FROM package_templates ORDER BY created_at DESC");
-                $templates = $stmt->fetchAll();
-                
-                $templates = array_map(function($t) {
-                    return [
-                        'id' => $t['id'],
-                        'name' => $t['name'],
-                        'packageValue' => (float)$t['package_value'],
-                        'serviceValue' => (float)$t['service_value'],
-                        'outletId' => isset($t['outlet_id']) ? $t['outlet_id'] : null
-                    ];
-                }, $templates);
-                
-                sendJSON($templates);
-            } catch (PDOException $e) {
-                if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
-                    sendJSON([]);
-                    exit;
-                }
-                sendError('Error loading package templates', 500);
-            }
-            
-        } elseif ($type === 'customer_packages') {
-            // Get all customer packages with template data
-            try {
-                $stmt = $pdo->query("
-                    SELECT cp.*, pt.package_value 
-                    FROM customer_packages cp
-                    LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
-                    ORDER BY cp.created_at DESC
-                ");
-                $packages = $stmt->fetchAll();
-                
-                $packages = array_map(function($p) {
-                    return [
-                        'id' => $p['id'],
-                        'customerName' => $p['customer_name'],
-                        'customerMobile' => $p['customer_mobile'],
-                        'packageTemplateId' => $p['package_template_id'],
-                        'outletId' => $p['outlet_id'],
-                        'assignedDate' => $p['assigned_date'],
-                        'remainingServiceValue' => (float)$p['remaining_service_value'],
-                        'initialPackageValue' => (float)($p['package_value'] ?? 0)
-                    ];
-                }, $packages);
-                
-                sendJSON($packages);
-            } catch (PDOException $e) {
-                if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
-                    sendJSON([]);
-                    exit;
-                }
-                sendError('Error loading customer packages', 500);
-            }
-            
-        } elseif ($type === 'service_records') {
-            // Get all service records
-            try {
-                $stmt = $pdo->query("SELECT * FROM service_records ORDER BY created_at DESC");
-                $records = $stmt->fetchAll();
+     error_log("===== PACKAGES API START =====");
+     error_log("Authorization check starting...");
+     
+     $user = verifyAuthorization(true);
+     $currentUserId = $user['user_id'];
+     
+     error_log("User authorized. User ID: $currentUserId");
+     
+     $pdo = getDBConnection();
+     error_log("Database connection established");
+     
+     // Fetch user info from database (more reliable than JWT)
+     $userStmt = $pdo->prepare("SELECT role, is_super_admin FROM users WHERE id = ?");
+     $userStmt->execute([$currentUserId]);
+     $userRow = $userStmt->fetch();
+     
+     if (!$userRow) {
+         error_log("User not found in database: $currentUserId");
+         sendError('User not found', 404);
+         exit;
+     }
+     
+     $userRole = $userRow['role'];
+     $isSuperAdmin = (bool)$userRow['is_super_admin'];
+     
+     error_log("User ID: $currentUserId, Role: $userRole, isSuperAdmin: " . ($isSuperAdmin ? 'true' : 'false'));
+     
+     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+          $type = $_GET['type'] ?? 'templates';
+         
+         if ($type === 'templates') {
+             // Get all package templates
+             // Admin sees all, user sees only their outlet's templates
+             try {
+                 error_log("Fetching templates for user role: $userRole, isSuperAdmin: $isSuperAdmin");
+                 
+                 // First check if table exists
+                 error_log("Checking if package_templates table exists");
+                 $checkTableStmt = $pdo->prepare("
+                     SELECT TABLE_NAME FROM information_schema.TABLES 
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'package_templates'
+                 ");
+                 $checkTableStmt->execute();
+                 $tableExists = $checkTableStmt->fetch();
+                 
+                 if (!$tableExists) {
+                     error_log("package_templates table does not exist");
+                     sendJSON([]);
+                     exit;
+                 }
+                 
+                 error_log("package_templates table exists");
+                 
+                 if ($isSuperAdmin || $userRole === 'admin') {
+                     error_log("Admin/Super-admin template query");
+                     $stmt = $pdo->prepare("SELECT id, name, package_value, service_value, outlet_id FROM package_templates");
+                     $stmt->execute();
+                 } else {
+                     // Regular user: see templates from their assigned outlets + global templates (outlet_id IS NULL)
+                     error_log("Regular user template query for user: $currentUserId");
+                     $stmt = $pdo->prepare("
+                         SELECT DISTINCT pt.id, pt.name, pt.package_value, pt.service_value, pt.outlet_id
+                         FROM package_templates pt
+                         LEFT JOIN user_outlets uo ON pt.outlet_id = uo.outlet_id
+                         WHERE pt.outlet_id IS NULL OR uo.user_id = ?
+                     ");
+                     $stmt->execute([$currentUserId]);
+                 }
+                 
+                 $templates = $stmt->fetchAll();
+                 error_log("Fetched " . count($templates) . " templates");
+                 
+                 $templates = array_map(function($t) {
+                     return [
+                         'id' => $t['id'],
+                         'name' => $t['name'],
+                         'packageValue' => (float)$t['package_value'],
+                         'serviceValue' => (float)$t['service_value'],
+                         'outletId' => isset($t['outlet_id']) ? $t['outlet_id'] : null
+                     ];
+                 }, $templates);
+                 
+                 sendJSON($templates);
+             } catch (PDOException $e) {
+                 error_log("Template fetch PDOException: " . $e->getMessage() . " | Code: " . $e->getCode() . " | SQL State: " . $e->errorInfo[0]);
+                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                     error_log("Table doesn't exist, returning empty array");
+                     sendJSON([]);
+                     exit;
+                 }
+                 sendError('Error loading package templates', 500);
+             } catch (Exception $e) {
+                 error_log("Unexpected template error: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+                 sendError('Unexpected error loading package templates', 500);
+             }
+             
+         } elseif ($type === 'customer_packages') {
+             // Get all customer packages with template data
+             // Admin sees all, user sees only packages from their assigned outlets
+             try {
+                 error_log("Fetching customer packages for user role: $userRole");
+                 
+                 if ($isSuperAdmin || $userRole === 'admin') {
+                     error_log("Admin/Super-admin customer packages query");
+                     $stmt = $pdo->prepare("
+                         SELECT cp.id, cp.customer_name, cp.customer_mobile, cp.package_template_id, cp.outlet_id, cp.assigned_date, cp.remaining_service_value, pt.package_value
+                         FROM customer_packages cp
+                         LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
+                     ");
+                     $stmt->execute();
+                 } else {
+                     // Regular user: see only packages from their assigned outlets
+                     error_log("Regular user customer packages query for user: $currentUserId");
+                     $stmt = $pdo->prepare("
+                         SELECT cp.id, cp.customer_name, cp.customer_mobile, cp.package_template_id, cp.outlet_id, cp.assigned_date, cp.remaining_service_value, pt.package_value
+                         FROM customer_packages cp
+                         LEFT JOIN package_templates pt ON cp.package_template_id = pt.id
+                         INNER JOIN user_outlets uo ON cp.outlet_id = uo.outlet_id
+                         WHERE uo.user_id = ?
+                     ");
+                     $stmt->execute([$currentUserId]);
+                 }
+                 
+                 $packages = $stmt->fetchAll();
+                 error_log("Fetched " . count($packages) . " customer packages");
+                 
+                 $packages = array_map(function($p) {
+                     return [
+                         'id' => $p['id'],
+                         'customerName' => $p['customer_name'],
+                         'customerMobile' => $p['customer_mobile'],
+                         'packageTemplateId' => $p['package_template_id'],
+                         'outletId' => $p['outlet_id'],
+                         'assignedDate' => $p['assigned_date'],
+                         'remainingServiceValue' => (float)$p['remaining_service_value'],
+                         'initialPackageValue' => (float)($p['package_value'] ?? 0)
+                     ];
+                 }, $packages);
+                 
+                 sendJSON($packages);
+                 } catch (PDOException $e) {
+                 error_log("Customer packages fetch PDOException: " . $e->getMessage() . " | Code: " . $e->getCode());
+                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                     error_log("Table doesn't exist, returning empty array");
+                     sendJSON([]);
+                     exit;
+                 }
+                 sendError('Error loading customer packages', 500);
+                 } catch (Exception $e) {
+                 error_log("Unexpected customer packages error: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+                 sendError('Unexpected error loading customer packages', 500);
+                 }
+             
+         } elseif ($type === 'service_records') {
+             // Get all service records
+             // Admin sees all, user sees only records from their assigned outlets
+             try {
+                 error_log("Service records fetch starting. User ID: $currentUserId, Role: $userRole, isSuperAdmin: " . ($isSuperAdmin ? 'true' : 'false'));
+                 
+                 if ($isSuperAdmin || $userRole === 'admin') {
+                     error_log("Admin/Super-admin service records query");
+                     $stmt = $pdo->prepare("SELECT sr.* FROM service_records sr ORDER BY sr.created_at DESC LIMIT 1000");
+                     $stmt->execute();
+                 } else {
+                     // Regular user: see only records from their assigned outlets
+                     // Try using outlet_id if column exists, otherwise use package's outlet
+                     error_log("Regular user service records query for user: $currentUserId");
+                     
+                     // First, check if outlet_id column exists
+                     $checkStmt = $pdo->prepare("
+                         SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                         WHERE TABLE_SCHEMA = DATABASE() 
+                         AND TABLE_NAME = 'service_records'
+                         AND COLUMN_NAME = 'outlet_id'
+                     ");
+                     $checkStmt->execute();
+                     $hasOutletIdColumn = $checkStmt->fetch() !== false;
+                     
+                     if ($hasOutletIdColumn) {
+                         // Use outlet_id filtering
+                         $stmt = $pdo->prepare("
+                             SELECT sr.* 
+                             FROM service_records sr
+                             WHERE sr.outlet_id IN (
+                                 SELECT outlet_id FROM user_outlets WHERE user_id = ?
+                             )
+                             ORDER BY sr.created_at DESC
+                             LIMIT 1000
+                         ");
+                     } else {
+                         // Fall back to filtering via customer_packages
+                         $stmt = $pdo->prepare("
+                             SELECT sr.* 
+                             FROM service_records sr
+                             INNER JOIN customer_packages cp ON sr.customer_package_id = cp.id
+                             WHERE cp.outlet_id IN (
+                                 SELECT outlet_id FROM user_outlets WHERE user_id = ?
+                             )
+                             ORDER BY sr.created_at DESC
+                             LIMIT 1000
+                         ");
+                     }
+                     
+                     $stmt->execute([$currentUserId]);
+                 }
+                 
+                 $records = $stmt->fetchAll();
+                 error_log("Fetched " . count($records) . " service records");
                 
                 $records = array_map(function($r) {
                     return [
@@ -92,18 +239,25 @@ try {
                         'serviceName' => $r['service_name'],
                         'serviceValue' => (float)$r['service_value'],
                         'redeemedDate' => $r['redeemed_date'],
-                        'transactionId' => $r['transaction_id']
+                        'transactionId' => $r['transaction_id'],
+                        'staffName' => isset($r['staff_name']) ? $r['staff_name'] : null
                     ];
                 }, $records);
                 
                 sendJSON($records);
-            } catch (PDOException $e) {
+                } catch (PDOException $e) {
+                error_log("Service records fetch error: " . $e->getMessage() . " | Code: " . $e->getCode());
                 if (strpos($e->getMessage(), 'no such table') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+                    error_log("Table doesn't exist, returning empty array");
                     sendJSON([]);
                     exit;
                 }
-                sendError('Error loading service records', 500);
-            }
+                error_log("PDO Error Info: " . print_r($e->errorInfo, true));
+                sendError('Error loading service records: ' . $e->getMessage(), 500);
+                } catch (Exception $e) {
+                error_log("Unexpected service records error: " . $e->getMessage());
+                sendError('Unexpected error loading service records', 500);
+                }
         } else {
             sendError('Invalid type parameter', 400);
         }
@@ -113,41 +267,31 @@ try {
         $action = $data['action'] ?? '';
         
         if ($action === 'create_template') {
-            // Create new package template
-            validateRequired($data, ['name', 'packageValue', 'serviceValue']);
-            
-            // Sanitize inputs
-            $name = sanitizeString($data['name']);
-            
-            // Validate numeric values
-            $packageValue = filter_var($data['packageValue'], FILTER_VALIDATE_FLOAT);
-            $serviceValue = filter_var($data['serviceValue'], FILTER_VALIDATE_FLOAT);
-            
-            if ($packageValue === false || $packageValue <= 0) {
-                sendError('Package value must be a positive number', 400);
-            }
-            
-            if ($serviceValue === false || $serviceValue <= 0) {
-                sendError('Service value must be a positive number', 400);
-            }
-            
-            // Get outletId from request or from user's assigned outlet
-            $outletId = $data['outletId'] ?? '';
-            
-            if (empty($outletId) && !empty($_SESSION['user_id'])) {
-                // Try to get from user_outlets table
-                $stmt = $pdo->prepare("
-                    SELECT outlet_id FROM user_outlets 
-                    WHERE user_id = :userId 
-                    ORDER BY outlet_id ASC 
-                    LIMIT 1
-                ");
-                $stmt->execute([':userId' => $_SESSION['user_id']]);
-                $userOutlet = $stmt->fetch();
-                if ($userOutlet) {
-                    $outletId = $userOutlet['outlet_id'];
-                }
-            }
+             // Only admins can create templates
+             if (!($isSuperAdmin || $userRole === 'admin')) {
+                 sendError('Only administrators can create package templates', 403);
+             }
+             
+             // Create new package template
+             validateRequired($data, ['name', 'packageValue', 'serviceValue']);
+             
+             // Sanitize inputs
+             $name = sanitizeString($data['name']);
+             
+             // Validate numeric values
+             $packageValue = filter_var($data['packageValue'], FILTER_VALIDATE_FLOAT);
+             $serviceValue = filter_var($data['serviceValue'], FILTER_VALIDATE_FLOAT);
+             
+             if ($packageValue === false || $packageValue <= 0) {
+                 sendError('Package value must be a positive number', 400);
+             }
+             
+             if ($serviceValue === false || $serviceValue <= 0) {
+                 sendError('Service value must be a positive number', 400);
+             }
+             
+             // Admin templates are global (outlet_id = NULL) - available to all outlets
+             $outletId = null;
             
             $templateId = generateId('pt-');
             
@@ -198,11 +342,16 @@ try {
             ], 201);
             
         } elseif ($action === 'delete_template') {
-            // Delete package template
-            validateRequired($data, ['id']);
-            
-            // Sanitize input
-            $templateId = sanitizeString($data['id']);
+             // Only admins can delete templates
+             if (!($isSuperAdmin || $userRole === 'admin')) {
+                 sendError('Only administrators can delete package templates', 403);
+             }
+             
+             // Delete package template
+             validateRequired($data, ['id']);
+             
+             // Sanitize input
+             $templateId = sanitizeString($data['id']);
             
             // Check if template is used in any customer packages
             $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM customer_packages WHERE package_template_id = :id");
@@ -404,19 +553,22 @@ try {
                     $recordId = generateId('sr-');
                     
                     $stmt = $pdo->prepare("
-                        INSERT INTO service_records (id, customer_package_id, service_name, service_value, redeemed_date, transaction_id, staff_name)
-                        VALUES (:id, :packageId, :serviceName, :serviceValue, :redeemedDate, :transactionId, :staffName)
-                    ");
-                    
-                    $stmt->execute([
-                        ':id' => $recordId,
-                        ':packageId' => $packageId,
-                        ':serviceName' => $serviceName,
-                        ':serviceValue' => $serviceValue,
-                        ':redeemedDate' => $assignedDate,
-                        ':transactionId' => $transactionId,
-                        ':staffName' => $staffName
-                    ]);
+                         INSERT INTO service_records (id, customer_name, customer_mobile, customer_package_id, service_name, service_value, redeemed_date, transaction_id, staff_name, outlet_id)
+                         VALUES (:id, :customerName, :customerMobile, :packageId, :serviceName, :serviceValue, :redeemedDate, :transactionId, :staffName, :outletId)
+                     ");
+                     
+                     $stmt->execute([
+                         ':id' => $recordId,
+                         ':customerName' => $customerName,
+                         ':customerMobile' => $customerMobile,
+                         ':packageId' => $packageId,
+                         ':serviceName' => $serviceName,
+                         ':serviceValue' => $serviceValue,
+                         ':redeemedDate' => $assignedDate,
+                         ':transactionId' => $transactionId,
+                         ':staffName' => $staffName,
+                         ':outletId' => $outletId
+                     ]);
                     
                     // Update staff target with percentage
                     if (!empty($staffId) && $serviceValue > 0) {
@@ -616,6 +768,8 @@ try {
                 // Create service records and update staff targets
                 $transactionId = generateId('txn-');
                 $newRecords = [];
+                $balanceProgression = [];
+                $currentBalance = (float)$package['remaining_service_value'];
                 
                 foreach ($processedServices as $service) {
                     $serviceName = $service['serviceName'];
@@ -636,19 +790,32 @@ try {
                     $recordId = generateId('sr-');
                     
                     $stmt = $pdo->prepare("
-                        INSERT INTO service_records (id, customer_package_id, service_name, service_value, redeemed_date, transaction_id, staff_name)
-                        VALUES (:id, :packageId, :serviceName, :serviceValue, :redeemedDate, :transactionId, :staffName)
+                        INSERT INTO service_records (id, customer_name, customer_mobile, customer_package_id, service_name, service_value, redeemed_date, transaction_id, staff_name, outlet_id)
+                        VALUES (:id, :customerName, :customerMobile, :packageId, :serviceName, :serviceValue, :redeemedDate, :transactionId, :staffName, :outletId)
                     ");
                     
                     $stmt->execute([
                         ':id' => $recordId,
+                        ':customerName' => $package['customer_name'],
+                        ':customerMobile' => $package['customer_mobile'],
                         ':packageId' => $packageId,
                         ':serviceName' => $serviceName,
                         ':serviceValue' => $serviceValue,
                         ':redeemedDate' => $redeemDate,
                         ':transactionId' => $transactionId,
-                        ':staffName' => $staffName
+                        ':staffName' => $staffName,
+                        ':outletId' => $package['outlet_id']
                     ]);
+                    
+                    // Track balance progression for each service
+                    $remainingAfterService = $currentBalance - (float)$serviceValue;
+                    $balanceProgression[] = [
+                        'serviceName' => $serviceName,
+                        'previousBalance' => (float)$currentBalance,
+                        'deductionAmount' => (float)$serviceValue,
+                        'remainingBalance' => max(0, (float)$remainingAfterService)
+                    ];
+                    $currentBalance = $remainingAfterService;
                     
                     // Update staff target with percentage
                     if (!empty($staffId) && $serviceValue > 0) {
@@ -692,7 +859,8 @@ try {
                         'assignedDate' => $package['assigned_date'],
                         'remainingServiceValue' => (float)$newRemainingValue
                     ],
-                    'newRecords' => $newRecords
+                    'newRecords' => $newRecords,
+                    'balanceProgression' => $balanceProgression
                 ]);
                 
             } catch (Exception $e) {
@@ -742,8 +910,23 @@ try {
 } catch (Exception $e) {
     $errorMsg = 'Server error: ' . $e->getMessage();
     $errorDetails = "File: " . $e->getFile() . "\nLine: " . $e->getLine() . "\nTrace: " . $e->getTraceAsString();
-    error_log($errorMsg . "\n" . $errorDetails);
+    error_log("PACKAGES ERROR: " . $errorMsg . "\n" . $errorDetails);
+    
+    // Log more details if it's a PDOException
+    if ($e instanceof PDOException) {
+        error_log("PDO Error Info: " . print_r($e->errorInfo, true));
+    }
+    
     http_response_code(500);
-    sendError($errorMsg, 500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error' => $errorMsg,
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+    ]);
     exit();
+} finally {
+    // Restore error handler
+    restore_error_handler();
 }
