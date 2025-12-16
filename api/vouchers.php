@@ -27,7 +27,7 @@ function generateVoucherCode() {
 
 // Start session and verify authorization
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    @session_start();
 }
 $user = verifyAuthorization(true);
 $currentUserId = $user['user_id'];

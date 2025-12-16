@@ -140,8 +140,6 @@ CREATE TABLE IF NOT EXISTS sittings_packages (
     outlet_id VARCHAR(50) COMMENT 'Outlet-specific (NULL = global)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (outlet_id) REFERENCES outlets(id),
-    FOREIGN KEY (service_id) REFERENCES services(id),
     INDEX idx_outlet_id (outlet_id),
     INDEX idx_service_id (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -231,10 +229,6 @@ CREATE TABLE IF NOT EXISTS customer_sittings_packages (
     initial_sitting_date DATE COMMENT 'Date of first sitting',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sittings_package_id) REFERENCES sittings_packages(id),
-    FOREIGN KEY (service_id) REFERENCES services(id),
-    FOREIGN KEY (initial_staff_id) REFERENCES staff(id),
-    FOREIGN KEY (outlet_id) REFERENCES outlets(id),
     INDEX idx_outlet_id (outlet_id),
     INDEX idx_assigned_date (assigned_date),
     INDEX idx_customer_mobile (customer_mobile),

@@ -1,17 +1,10 @@
-# Enable CORS
-Header set Access-Control-Allow-Origin "*"
-Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-Header set Access-Control-Allow-Headers "Content-Type, Authorization"
+# Allow PHP files in /api to execute directly
+RewriteEngine Off
 
-# Enable HTTP Authorization Header
-RewriteEngine On
-RewriteCond %{HTTP:Authorization} ^(.*)
-RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+# Disable directory listing
+Options -Indexes
 
-# Allow direct access to diagnostic files
-RewriteRule ^(test-db\.php|test-auth\.php|init-db\.php|health\.php|debug-packages\.php|debug-packages-simple\.php|debug-staff\.php|diagnose-all\.php|check-expenses-table\.php|debug-expenses\.php|test-expense-logic\.php|migrate-add-outlet-id\.php|migrate-add-cash-deposited\.php)$ $1 [L]
-
-# Route all API requests to router.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ router.php [L,QSA]
+# Allow all requests to PHP files
+<FilesMatch "\.php$">
+    Allow from all
+</FilesMatch>

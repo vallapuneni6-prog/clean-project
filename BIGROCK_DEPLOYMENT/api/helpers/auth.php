@@ -58,7 +58,17 @@ function getAuthorizationToken() {
         }
     }
     
-    // Method 4: Check custom headers (case-insensitive)
+    // Method 4: Check environment variables
+    if (!empty($_ENV['HTTP_AUTHORIZATION'])) {
+        logAuthMessage("Found HTTP_AUTHORIZATION in environment");
+        if (preg_match('/Bearer\s+(.+)/', $_ENV['HTTP_AUTHORIZATION'], $matches)) {
+            $token = trim($matches[1]);
+            logAuthMessage("Extracted Bearer token from environment");
+            return $token;
+        }
+    }
+    
+    // Method 5: Check custom headers (case-insensitive)
     foreach ($_SERVER as $key => $value) {
         if (strpos($key, 'HTTP_') === 0 && strpos($key, 'AUTHORIZATION') !== false) {
             logAuthMessage("Found custom authorization header: $key");
@@ -182,9 +192,9 @@ function getJWTSecret() {
 function verifyAuthorization($requireAuth = true) {
      logAuthMessage("Verifying authorization (requireAuth: " . ($requireAuth ? 'true' : 'false') . ")");
      
-     // Start session if not already started
+     // Start session if not already started (with error suppression for BigRock)
      if (session_status() === PHP_SESSION_NONE) {
-         session_start();
+         @session_start();
      }
      
      // Method 1: Check session first

@@ -1,18 +1,31 @@
-<IfModule mod_rewrite.c>
 RewriteEngine On
+RewriteBase /
 
-# Enable HTTP Authorization Header
-RewriteCond %{HTTP:Authorization} ^(.*)
-RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+# Preserve Authorization header
+SetEnvIf Authorization ^(.*)$ HTTP_AUTHORIZATION=$1
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-# Skip rewriting for actual files and directories
-RewriteCond %{REQUEST_FILENAME} -f [OR]
+# Force HTTPS
+RewriteCond %{HTTPS} !=on
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
+
+# CRITICAL: Don't rewrite /api requests - must be FIRST
+RewriteRule ^api(/|$) - [L]
+
+# Don't rewrite /dist requests
+RewriteRule ^dist(/|$) - [L]
+
+# Allow real files (skip rewriting)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Allow real directories (skip rewriting)
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Skip rewriting for /api directory and its subdirectories
-RewriteRule ^api/ - [L]
+# SPA routing: rewrite everything else to dist/index.html
+RewriteRule ^(.*)$ dist/index.html [QSA,L]
 
-# Rewrite everything else to index.php
-RewriteRule ^(.*)$ index.php [QSA,L]
-</IfModule>
+# Disable directory listing
+Options -Indexes

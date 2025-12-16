@@ -96,9 +96,8 @@ if (php_sapi_name() !== 'cli') {
         'http://localhost:3000',      // Local development (alt)
         'http://127.0.0.1:5173',      // Local development alt
         'http://127.0.0.1:3000',      // Local development alt
-        // Add production domains here:
-        // 'https://yourdomain.com',
-        // 'https://www.yourdomain.com',
+        'https://ansira.in',          // Production
+        'https://www.ansira.in',      // Production www
     ];
     
     // Get origin from request
