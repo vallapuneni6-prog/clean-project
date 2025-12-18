@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Voucher, Outlet, VoucherStatus } from '../types';
+import { fetchAPI } from '../api';
 
 export const Notifications: React.FC = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -26,14 +27,13 @@ export const Notifications: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [vouchersRes, outletsRes] = await Promise.all([
-        fetch('/api/vouchers'),
-        fetch('/api/outlets')
+      const [vouchersData, outletsData] = await Promise.all([
+        fetchAPI<any[]>('/vouchers').catch(() => []),
+        fetchAPI<Outlet[]>('/outlets').catch(() => [])
       ]);
 
-      if (vouchersRes.ok) {
-        const data = await vouchersRes.json();
-        setVouchers(data.map((v: any) => ({
+      if (vouchersData) {
+        setVouchers(vouchersData.map((v: any) => ({
           ...v,
           issueDate: new Date(v.issueDate),
           expiryDate: new Date(v.expiryDate),
@@ -41,8 +41,8 @@ export const Notifications: React.FC = () => {
         })));
       }
 
-      if (outletsRes.ok) {
-        setOutlets(await outletsRes.json());
+      if (outletsData) {
+        setOutlets(outletsData);
       }
     } catch (error) {
       console.error('Failed to load vouchers:', error);
@@ -113,30 +113,25 @@ Don't miss out on your exclusive pampering session at Naturals Salon - Madinagud
     }, 1000);
 
     // Mark as sent in database
-    try {
-      const response = await fetch('/api/vouchers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sendReminder',
-          id: voucher.id
-        })
-      });
+     try {
+       await fetchAPI('/vouchers', {
+         method: 'POST',
+         body: JSON.stringify({
+           action: 'sendReminder',
+           id: voucher.id
+         })
+       });
 
-      if (response.ok) {
-        // Update local state
-        const updatedVouchers = vouchers.map(v => 
-          v.id === voucher.id ? { ...v, reminderSent: true, reminderSentDate: new Date().toISOString() } : v
-        );
-        setVouchers(updatedVouchers);
-        showMessage(`Reminder sent to ${voucher.recipientName}!`, 'success');
-      } else {
-        showMessage('Failed to save reminder status', 'error');
-      }
-    } catch (error) {
-      console.error('Error saving reminder status:', error);
-      showMessage('Error saving reminder status', 'error');
-    }
+       // Update local state
+       const updatedVouchers = vouchers.map(v => 
+         v.id === voucher.id ? { ...v, reminderSent: true, reminderSentDate: new Date().toISOString() } : v
+       );
+       setVouchers(updatedVouchers);
+       showMessage(`Reminder sent to ${voucher.recipientName}!`, 'success');
+     } catch (error) {
+       console.error('Error saving reminder status:', error);
+       showMessage('Error saving reminder status', 'error');
+     }
   };
 
   const getDaysUntilExpiry = (expiryDate: Date) => {

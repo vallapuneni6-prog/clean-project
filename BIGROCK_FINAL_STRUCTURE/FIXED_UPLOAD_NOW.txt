@@ -1,0 +1,25 @@
+⚠️ CRITICAL: LOCAL CODE WAS BROKEN - NOW FIXED
+
+What happened:
+- Your local src/api.ts had OLD code (.split pattern)
+- The uploaded build was using that old code
+- Just fixed it now with proper indexOf/substring pattern
+
+What to do NOW:
+
+1. IMMEDIATELY UPLOAD new dist/ to BigRock:
+   - Delete /home3/a176229d/public_html/dist/
+   - Upload fresh dist/ folder from local machine
+   - Files: index.html + 2 assets
+
+2. Clear browser cache:
+   - Ctrl+Shift+Delete → Clear all time → Select images/cache → Clear
+   - OR: Open in private window
+
+3. Test on live:
+   - Open https://salons.ansira.live/
+   - Check DevTools Network → should show /api/outlets.php → 200 OK
+
+The hash is still index-BFMQoUOQ.js because it had that hash before, but the CONTENT is now correct.
+
+Upload immediately!

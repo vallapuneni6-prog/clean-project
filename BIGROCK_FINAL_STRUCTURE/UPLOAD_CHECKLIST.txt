@@ -1,0 +1,131 @@
+═════════════════════════════════════════════════════════════════════
+  BIGROCK DEPLOYMENT - FTP UPLOAD CHECKLIST
+═════════════════════════════════════════════════════════════════════
+
+SERVER: BigRock Hosting
+ACCOUNT: a176229d
+PUBLIC_HTML: /home3/a176229d/public_html/
+
+═════════════════════════════════════════════════════════════════════
+STEP 1: UPLOAD NEW BUILD
+═════════════════════════════════════════════════════════════════════
+
+Delete existing dist/ folder on server (or rename to dist_old/)
+Upload local dist/ folder to: /home3/a176229d/public_html/dist/
+
+Files to upload (from local dist/):
+✓ index.html
+✓ assets/index-BFMQoUOQ.js  (NEW HASH - Different from old build)
+✓ assets/index-D9GwlXY3.css
+
+═════════════════════════════════════════════════════════════════════
+STEP 2: VERIFY .htaccess
+═════════════════════════════════════════════════════════════════════
+
+Ensure /home3/a176229d/public_html/.htaccess contains:
+
+Critical lines (for JWT Authorization):
+  RewriteCond %{HTTP:Authorization} ^(.*)
+  RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+  SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+Critical lines (prevent /api/ rewrite):
+  RewriteCond %{REQUEST_URI} ^/api/ [NC]
+  RewriteRule ^ - [L]
+
+If missing, upload .htaccess from local project root
+
+═════════════════════════════════════════════════════════════════════
+STEP 3: API FILES - NO CHANGES NEEDED
+═════════════════════════════════════════════════════════════════════
+
+These already have session path fixes (do NOT overwrite):
+✓ /api/login.php
+✓ /api/auth.php
+✓ /api/outlets.php
+✓ /api/packages.php
+✓ /api/services.php
+✓ /api/staff.php
+✓ /api/invoices.php
+✓ /api/vouchers.php
+✓ /api/customers.php
+✓ /api/sittings-packages.php
+
+═════════════════════════════════════════════════════════════════════
+STEP 4: VERIFY AFTER UPLOAD
+═════════════════════════════════════════════════════════════════════
+
+1. Open browser and visit: https://salons.ansira.live/
+
+2. Login with valid credentials
+
+3. Open DevTools (F12) → Network tab
+
+4. Click "Load Outlets" or navigate to any data page
+
+5. In Network tab, verify:
+   ✓ Request shows /api/outlets.php (not /api/outlets)
+   ✓ Authorization header is present with Bearer token
+   ✓ Response status is 200 OK (not 404)
+
+Example of correct network request:
+  Method: GET
+  URL: https://salons.ansira.live/api/outlets.php
+  Status: 200 OK
+  Headers include: Authorization: Bearer [token]
+
+═════════════════════════════════════════════════════════════════════
+STEP 5: CLEAR CLIENT CACHE
+═════════════════════════════════════════════════════════════════════
+
+If users still see old version:
+
+Option A: Manual Clear
+1. Open DevTools (F12)
+2. Settings → Clear cookies/cache
+3. Hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
+
+Option B: Programmatic Clear
+Run in browser console:
+  localStorage.clear(); sessionStorage.clear(); location.reload();
+
+═════════════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═════════════════════════════════════════════════════════════════════
+
+Problem: Still getting 404 errors after upload
+Solution:
+- Verify new dist/ folder exists on server
+- Check that old dist/ was completely replaced (not merged)
+- Clear browser cache (Step 5)
+- Hard refresh page
+
+Problem: Authorization header missing in Network tab
+Solution:
+- Verify .htaccess has Authorization passthrough (Step 2)
+- Check that localStorage has 'authToken' key (DevTools → Application)
+- Login again to get fresh token
+
+Problem: API returns 403 Forbidden
+Solution:
+- Check JWT token is valid (hasn't expired)
+- Verify /api/helpers/auth.php is validating tokens correctly
+- Check user has permission for that outlet
+
+═════════════════════════════════════════════════════════════════════
+IMPORTANT NOTES
+═════════════════════════════════════════════════════════════════════
+
+• NEW BUILD HASH: index-BFMQoUOQ.js (different from previous)
+• Old build hash was: index-CSiyhuyU.js or index-DcwZN4C7.js
+• CSS file unchanged: index-D9GwlXY3.css
+
+• All .php appending now happens in the minified bundle
+• The fetchAPI() wrapper ensures this works for ALL API calls
+
+• Do NOT need to modify any backend PHP files
+• Session path already configured in all API files
+
+═════════════════════════════════════════════════════════════════════
+
+Questions? Check DEPLOYMENT_FINAL.md for detailed info

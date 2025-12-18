@@ -30,6 +30,12 @@ function generateVoucherCode() {
 
 // Start session and verify authorization
 if (session_status() === PHP_SESSION_NONE) {
+    // Configure session path for BigRock hosting
+    $sessionPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'sessions';
+    if (!is_dir($sessionPath)) {
+        @mkdir($sessionPath, 0755, true);
+    }
+    @ini_set('session.save_path', $sessionPath);
     @session_start();
 }
 $user = verifyAuthorization(true);

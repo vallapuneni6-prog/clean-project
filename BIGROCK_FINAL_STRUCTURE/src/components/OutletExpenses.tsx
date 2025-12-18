@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Outlet } from '../types';
 import { getAuthHeaders } from '../utils/auth';
+import { fetchAPI } from '../api';
 
 interface OutletExpenseRecord {
     id: string;
@@ -74,28 +75,24 @@ export const OutletExpenses: React.FC<OutletExpensesProps> = ({ currentUser, out
     const loadExpenses = async () => {
         try {
             setLoading(true);
-            let url = '/api/outlet-expenses?';
+            let query = '?';
             
             if (selectedOutlet) {
-                url += `outletId=${encodeURIComponent(selectedOutlet)}&`;
+                query += `outletId=${encodeURIComponent(selectedOutlet)}&`;
             }
             
-            url += `startDate=${encodeURIComponent(dateRange.startDate)}&endDate=${encodeURIComponent(dateRange.endDate)}`;
+            query += `startDate=${encodeURIComponent(dateRange.startDate)}&endDate=${encodeURIComponent(dateRange.endDate)}`;
 
-            const response = await fetch(url, {
-                headers: getAuthHeaders()
-            });
+            const data = await fetchAPI<OutletExpenseRecord[]>(`/outlet-expenses${query}`).catch(() => []);
 
-            if (response.ok) {
-                const data = await response.json();
+            if (data) {
                 // Sort by date descending
-                const sortedData = (Array.isArray(data) ? data : []).sort((a: any, b: any) =>
+                const sortedData = data.sort((a: any, b: any) =>
                     new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime()
                 );
                 setExpenses(sortedData);
             } else {
-                const errorData = await response.json();
-                showMessage(errorData.message || 'Failed to load expenses', 'error');
+                showMessage('Failed to load expenses', 'error');
                 setExpenses([]);
             }
         } catch (error) {
@@ -141,9 +138,8 @@ export const OutletExpenses: React.FC<OutletExpensesProps> = ({ currentUser, out
         }
 
         try {
-            const response = await fetch('/api/outlet-expenses', {
+            await fetchAPI('/outlet-expenses', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({
                     outletId: formData.outletId,
                     expenseDate: formData.expenseDate,
@@ -154,22 +150,17 @@ export const OutletExpenses: React.FC<OutletExpensesProps> = ({ currentUser, out
                 }),
             });
 
-            if (response.ok) {
-                showMessage('Expense recorded successfully!', 'success');
-                setFormData({
-                    outletId: '',
-                    expenseDate: new Date().toISOString().split('T')[0],
-                    category: '',
-                    description: '',
-                    amount: 0,
-                    notes: '',
-                });
-                setShowAddForm(false);
-                loadExpenses();
-            } else {
-                const errorData = await response.json();
-                showMessage(errorData.message || 'Failed to record expense', 'error');
-            }
+            showMessage('Expense recorded successfully!', 'success');
+            setFormData({
+                outletId: '',
+                expenseDate: new Date().toISOString().split('T')[0],
+                category: '',
+                description: '',
+                amount: 0,
+                notes: '',
+            });
+            setShowAddForm(false);
+            loadExpenses();
         } catch (error) {
             console.error('Error recording expense:', error);
             showMessage('Error recording expense', 'error');

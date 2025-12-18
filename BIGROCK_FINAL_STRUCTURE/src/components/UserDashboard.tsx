@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerPackage, User, Outlet, PackageTemplate, SittingsPackage, CustomerSittingsPackage, ServiceRecord } from '../types';
 import { generateBrandedPackageInvoiceImage, generateBrandedSittingsInvoiceImage } from './downloadBrandedPackage';
+import { fetchAPI } from '../api';
 
 interface UserDashboardProps {
     currentUser: User;
@@ -138,38 +139,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     };
 
     const handleMobileNumberChange = async (mobile: string, isSittings: boolean = false) => {
-        if (!isSittings) {
-            setAssignForm({ ...assignForm, customerMobile: mobile });
-        } else {
-            setAssignSittingsForm({ ...assignSittingsForm, customerMobile: mobile });
-        }
+         if (!isSittings) {
+             setAssignForm({ ...assignForm, customerMobile: mobile });
+         } else {
+             setAssignSittingsForm({ ...assignSittingsForm, customerMobile: mobile });
+         }
 
-        // If mobile is empty or too short, don't search
-        if (!mobile.trim() || mobile.trim().length < 10) {
-            return;
-        }
+         // If mobile is empty or too short, don't search
+         if (!mobile.trim() || mobile.trim().length < 10) {
+             return;
+         }
 
-        // Look up customer by mobile
-        setIsLookingUpCustomer(true);
-        try {
-            const response = await fetch(`/api/customers?mobile=${encodeURIComponent(mobile)}`);
-            if (response.ok) {
-                const customers = await response.json();
-                if (customers && customers.length > 0) {
-                    // If customer found, populate the customer name
-                    if (!isSittings) {
-                        setAssignForm(prev => ({ ...prev, customerName: customers[0].name }));
-                    } else {
-                        setAssignSittingsForm(prev => ({ ...prev, customerName: customers[0].name }));
-                    }
-                }
-            }
-        } catch (error) {
-            // Silently fail on lookup errors
-        } finally {
-            setIsLookingUpCustomer(false);
-        }
-    };
+         // Look up customer by mobile
+         setIsLookingUpCustomer(true);
+         try {
+             const customers = await fetchAPI<any[]>(`/customers?mobile=${encodeURIComponent(mobile)}`);
+             if (customers && customers.length > 0) {
+                 // If customer found, populate the customer name
+                 if (!isSittings) {
+                     setAssignForm(prev => ({ ...prev, customerName: customers[0].name }));
+                 } else {
+                     setAssignSittingsForm(prev => ({ ...prev, customerName: customers[0].name }));
+                 }
+             }
+         } catch (error) {
+             // Silently fail on lookup errors
+         } finally {
+             setIsLookingUpCustomer(false);
+         }
+     };
 
     useEffect(() => {
         loadData();
@@ -254,88 +252,66 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     }, []);
 
     const loadData = async () => {
-        try {
-            setLoading(true);
-            const staffUrl = userOutletId ? `/api/staff?outletId=${userOutletId}` : '/api/staff';
-            const sittingsPackagesUrl = userOutletId
-                ? `/api/sittings-packages?type=customer_packages&outletId=${userOutletId}`
-                : '/api/sittings-packages?type=customer_packages';
+         try {
+             setLoading(true);
+             const staffQuery = userOutletId ? `?outletId=${userOutletId}` : '';
+             const sittingsPackagesQuery = userOutletId
+                 ? `?type=customer_packages&outletId=${userOutletId}`
+                 : '?type=customer_packages';
 
-            const authToken = localStorage.getItem('authToken') || '';
-            const headers = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+             const packagesData = await fetchAPI('/packages?type=templates').catch(() => []);
+             const customerPackagesData = await fetchAPI('/packages?type=customer_packages').catch(() => []);
+             const staffData = await fetchAPI(`/staff${staffQuery}`).catch(() => []);
+             const servicesData = await fetchAPI('/services?action=list').catch(() => []);
+             const sittingsTemplatesData = await fetchAPI('/sittings-packages?type=templates').catch(() => []);
+             const customerSittingsData = await fetchAPI(`/sittings-packages${sittingsPackagesQuery}`).catch(() => []);
 
-            // Fetch options with credentials for session handling
-            const fetchOptions = {
-                headers,
-                credentials: 'include' as const
-            };
+             if (packagesData) {
+                 setPackages(packagesData);
+             }
 
-            const [packagesRes, customerPackagesRes, staffRes, servicesRes, sittingsTemplatesRes, customerSittingsRes] = await Promise.all([
-                fetch('/api/packages?type=templates', fetchOptions),
-                fetch('/api/packages?type=customer_packages', fetchOptions),
-                fetch(staffUrl, fetchOptions).catch(err => {
-                    console.error('Staff fetch failed:', err);
-                    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
-                }),
-                fetch('/api/services?action=list', fetchOptions),
-                fetch('/api/sittings-packages?type=templates', fetchOptions),
-                fetch(sittingsPackagesUrl, fetchOptions)
-            ]);
+             if (customerPackagesData) {
+                 const data = customerPackagesData;
+                 // Sort by latest assigned date first
+                 const sortedData = data.sort((a: any, b: any) =>
+                     new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
+                 );
+                 setCustomerPackages(sortedData.map((p: any) => ({
+                     ...p,
+                     assignedDate: new Date(p.assignedDate)
+                 })));
+             }
 
-            if (packagesRes.ok) {
-                setPackages(await packagesRes.json());
-            }
+             if (sittingsTemplatesData) {
+                 setSittingsTemplates(sittingsTemplatesData);
+             }
 
-            if (customerPackagesRes.ok) {
-                const data = await customerPackagesRes.json();
-                // Sort by latest assigned date first
-                const sortedData = data.sort((a: any, b: any) =>
-                    new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
-                );
-                setCustomerPackages(sortedData.map((p: any) => ({
-                    ...p,
-                    assignedDate: new Date(p.assignedDate)
-                })));
-            }
+             if (customerSittingsData) {
+                 const data = customerSittingsData;
+                 const sortedData = data.sort((a: any, b: any) =>
+                     new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
+                 );
+                 setCustomerSittingsPackages(sortedData.map((p: any) => ({
+                     ...p,
+                     assignedDate: new Date(p.assignedDate)
+                 })));
+             }
 
-            if (sittingsTemplatesRes.ok) {
-                const sittingsData = await sittingsTemplatesRes.json();
-                setSittingsTemplates(sittingsData);
-            }
+             if (staffData) {
+                 console.log('Staff data loaded:', staffData);
+                 setStaff(staffData);
+             }
 
-            if (customerSittingsRes.ok) {
-                const data = await customerSittingsRes.json();
-                const sortedData = data.sort((a: any, b: any) =>
-                    new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime()
-                );
-                setCustomerSittingsPackages(sortedData.map((p: any) => ({
-                    ...p,
-                    assignedDate: new Date(p.assignedDate)
-                })));
-            }
-
-            if (staffRes.ok) {
-                const staffData = await staffRes.json();
-                console.log('Staff data loaded:', staffData);
-                setStaff(staffData);
-            } else {
-                console.warn('Staff fetch failed with status:', staffRes.status);
-                if (!staffRes.ok) {
-                    const errorData = await staffRes.json().catch(() => ({ error: 'Unknown error' }));
-                    console.warn('Staff error:', errorData);
-                }
-            }
-
-            if (servicesRes.ok) {
-                setServices(await servicesRes.json());
-            }
-        } catch (error) {
-            console.error('Error loading data:', error);
-            showMessage('Failed to load data', 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
+             if (servicesData) {
+                 setServices(servicesData);
+             }
+         } catch (error) {
+             console.error('Error loading data:', error);
+             showMessage('Failed to load data', 'error');
+         } finally {
+             setLoading(false);
+         }
+     };
 
     const handleAssignPackage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -356,43 +332,41 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
 
         try {
-            const subtotal = calculateServiceSubtotal(assignServiceItems);
-            const gstAmount = (subtotal * assignForm.gstPercentage) / 100;
-            const totalWithGst = subtotal + gstAmount;
+             const subtotal = calculateServiceSubtotal(assignServiceItems);
+             const gstAmount = (subtotal * assignForm.gstPercentage) / 100;
+             const totalWithGst = subtotal + gstAmount;
 
-            const response = await fetch('/api/packages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'assign',
-                    customerName: assignForm.customerName,
-                    customerMobile: assignForm.customerMobile,
-                    packageTemplateId: assignForm.packageId,
-                    assignedDate: assignForm.assignedDate,
-                    outletId: userOutletId,
-                    gstPercentage: assignForm.gstPercentage,
-                    gstAmount: gstAmount,
-                    totalAmount: totalWithGst,
-                    staffTargetPercentage: 60,
-                    initialServices: assignServiceItems.map(s => {
-                        // Include GST in service total
-                        const serviceSubtotal = s.total;
-                        const serviceGst = (serviceSubtotal * assignForm.gstPercentage) / 100;
-                        return {
-                            staffId: s.staffId,
-                            staffName: s.staffName,
-                            serviceId: s.serviceId,
-                            serviceName: s.serviceName,
-                            quantity: s.quantity,
-                            price: s.price,
-                            total: serviceSubtotal + serviceGst
-                        };
-                    })
-                })
-            });
+             const result = await fetchAPI('/packages', {
+                 method: 'POST',
+                 body: JSON.stringify({
+                     action: 'assign',
+                     customerName: assignForm.customerName,
+                     customerMobile: assignForm.customerMobile,
+                     packageTemplateId: assignForm.packageId,
+                     assignedDate: assignForm.assignedDate,
+                     outletId: userOutletId,
+                     gstPercentage: assignForm.gstPercentage,
+                     gstAmount: gstAmount,
+                     totalAmount: totalWithGst,
+                     staffTargetPercentage: 60,
+                     initialServices: assignServiceItems.map(s => {
+                         // Include GST in service total
+                         const serviceSubtotal = s.total;
+                         const serviceGst = (serviceSubtotal * assignForm.gstPercentage) / 100;
+                         return {
+                             staffId: s.staffId,
+                             staffName: s.staffName,
+                             serviceId: s.serviceId,
+                             serviceName: s.serviceName,
+                             quantity: s.quantity,
+                             price: s.price,
+                             total: serviceSubtotal + serviceGst
+                         };
+                     })
+                 })
+             });
 
-            if (response.ok) {
-                const result = await response.json();
+             if (result) {
                 const newPackage = result.newPackage;
 
                 // Find the template and outlet
@@ -490,18 +464,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
         }
 
         try {
-            const subtotal = calculateServiceSubtotal(redeemServiceItems);
-            const gstAmount = (subtotal * redeemForm.gstPercentage) / 100;
-            const totalWithGst = subtotal + gstAmount;
+             const subtotal = calculateServiceSubtotal(redeemServiceItems);
+             const gstAmount = (subtotal * redeemForm.gstPercentage) / 100;
+             const totalWithGst = subtotal + gstAmount;
 
-            const response = await fetch('/api/packages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'redeem',
-                    customerPackageId: redeemForm.packageId,
-                    redemptionDate: redeemForm.redemptionDate,
-                    gstPercentage: redeemForm.gstPercentage,
+             const response = await fetchAPI('/packages', {
+                 method: 'POST',
+                 body: JSON.stringify({
+                     action: 'redeem',
+                     customerPackageId: redeemForm.packageId,
+                     redemptionDate: redeemForm.redemptionDate,
+                     gstPercentage: redeemForm.gstPercentage,
                     gstAmount: gstAmount,
                     totalAmount: totalWithGst,
                     staffTargetPercentage: 60,
@@ -784,16 +757,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             };
 
             console.log('Request body to be sent:', requestBody);
-            console.log('Stringified body:', JSON.stringify(requestBody));
+             console.log('Stringified body:', JSON.stringify(requestBody));
 
-            const response = await fetch('/api/sittings-packages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (response.ok) {
-                const result = await response.json();
+             const result = await fetchAPI('/sittings-packages', {
+                 method: 'POST',
+                 body: JSON.stringify(requestBody)
+             });
                 // Convert assignedDate to Date object to match the interface
                 const newPackage = {
                     ...result.newPackage,
@@ -887,9 +856,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 setTimeout(() => {
                     loadData();
                 }, 1000);
-            } else {
-                showMessage('Failed to assign sittings package', 'error');
-            }
         } catch (error) {
             console.error('Error assigning sittings package:', error);
             showMessage('Error assigning sittings package', 'error');
@@ -899,23 +865,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
     // Fetch sitting redemption history
     const fetchSittingRedemptionHistory = async (customerPackageId: string) => {
         try {
-            const response = await fetch('/api/sittings-packages', {
+            const redemptions = await fetchAPI<any[]>('/sittings-packages', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'get_redemption_history',
                     customerPackageId
                 })
             });
 
-            if (response.ok) {
-                const redemptions = await response.json();
-                console.log('Redemption history received:', redemptions);
-                setSittingRedemptions(redemptions);
-                setShowRedemptionHistory(true);
-            } else {
-                showMessage('Failed to fetch redemption history', 'error');
-            }
+            console.log('Redemption history received:', redemptions);
+            setSittingRedemptions(redemptions);
+            setShowRedemptionHistory(true);
         } catch (error) {
             console.error('Error fetching redemption history:', error);
             showMessage('Error fetching redemption history', 'error');
@@ -1070,9 +1030,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
             const selectedPackage = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
 
             // Sitting packages: 1 sitting used per redemption, include service details
-            const response = await fetch('/api/sittings-packages', {
+            const result = await fetchAPI('/sittings-packages', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'use_sitting',
                     customerPackageId: redeemSittingsForm.customerSittingsPackageId,
@@ -1084,9 +1043,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                     serviceValue: selectedPackage?.serviceValue || 0
                 })
             });
-
-            if (response.ok) {
-                const result = await response.json();
 
                 // Find customer package and template for invoice generation
                 let customerPkg = customerSittingsPackages.find(p => p.id === redeemSittingsForm.customerSittingsPackageId);
@@ -1174,9 +1130,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ currentUser, outle
                 setTimeout(() => {
                     loadData();
                 }, 1000);
-            } else {
-                showMessage('Failed to redeem sitting', 'error');
-            }
         } catch (error) {
             console.error('Error redeeming sitting:', error);
             showMessage('Error redeeming sitting', 'error');

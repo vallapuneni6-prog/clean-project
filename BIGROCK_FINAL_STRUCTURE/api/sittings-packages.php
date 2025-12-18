@@ -10,18 +10,22 @@ require_once 'helpers/auth.php';
 
 // Configure session to work with CORS
 if (session_status() === PHP_SESSION_NONE) {
+    // Configure session path for BigRock hosting
+    $sessionPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'sessions';
+    if (!is_dir($sessionPath)) {
+        @mkdir($sessionPath, 0755, true);
+    }
+    @ini_set('session.save_path', $sessionPath);
+    
     ini_set('session.cookie_samesite', 'Lax');
     ini_set('session.cookie_httponly', 1);
-    ini_set('session.cookie_secure', 0); // Set to 1 if using HTTPS
+    ini_set('session.cookie_secure', 1); // HTTPS enabled
     session_start();
 }
 
-// CORS headers
+// Set CORS and Auth headers first
+setAuthHeaders();
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Access-Control-Allow-Credentials: true');
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

@@ -1,0 +1,165 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║              🚨 URGENT: LIVE SERVER STILL BROKEN 🚨                    ║
+║                                                                         ║
+║         Current Error: "Failed to fetch outlets: 404"                  ║
+║         Cause: Old build deployed (missing .php appending)             ║
+║         Solution: Upload new dist/ folder immediately                  ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+⏱️  ESTIMATED TIME: 5 minutes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 CURRENT STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Error on Live Server:
+  ❌ "Outlets fetch error details: Error: Failed to fetch outlets: 404"
+  ❌ Network shows: GET /api/outlets (without .php)
+  ❌ Old build is still live (index-CSiyhuyU.js or similar)
+
+Why:
+  ❌ New build (index-BFMQoUOQ.js) has NOT been uploaded to BigRock yet
+
+Solution:
+  ✅ Upload new dist/ folder NOW
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ LOCAL STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Local Build:
+  ✅ src/api.ts has correct code (indexOf + substring pattern)
+  ✅ dist/ folder built with index-BFMQoUOQ.js
+  ✅ Ready to upload
+  ✅ .php appending logic is present
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 QUICK FIX - UPLOAD NOW (3 steps)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: Open FileZilla or FTP Client
+  ├─ Host: salons.ansira.live (or BigRock FTP)
+  ├─ Username: a176229d
+  ├─ Password: [your password]
+  └─ Port: 21 (or 22 for SFTP)
+
+STEP 2: Navigate and Delete Old Build
+  ├─ Path: /home3/a176229d/public_html/
+  ├─ Right-click dist/ folder
+  ├─ Delete (completely remove old folder)
+  └─ Confirm deletion
+
+STEP 3: Upload New Build
+  ├─ Local folder: c:\laragon\www\clean-project\BIGROCK_FINAL_STRUCTURE\dist\
+  ├─ Drag & drop into /home3/a176229d/public_html/
+  ├─ Wait for 3 files to upload:
+  │   ├─ index.html
+  │   ├─ assets/index-BFMQoUOQ.js ← NEW HASH
+  │   └─ assets/index-D9GwlXY3.css
+  └─ Verify upload complete (should see all 3 files)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After upload, do this:
+
+1. Open browser: https://salons.ansira.live/
+2. Press Ctrl+Shift+R (hard refresh to clear cache)
+3. Or clear cache manually:
+   a) Press F12 (DevTools)
+   b) Settings → Clear cookies and cache
+   c) Close DevTools
+   d) Refresh page
+
+4. Check Network tab (F12 → Network):
+   a) Should see: GET /api/outlets.php ← (with .php now!)
+   b) Status: 200 OK
+   c) Authorization: Bearer [token]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛠️  ALTERNATIVE: USE BIGROCK CPANEL FILE MANAGER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If FTP doesn't work:
+
+1. Login to BigRock cPanel
+2. Click "File Manager"
+3. Navigate to: public_html/
+4. Right-click dist/ folder → Delete
+5. Click "Upload" button
+6. Select local dist/ folder (zip it first if needed)
+7. Upload and extract
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 WHAT'S BEING UPLOADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Old Build (currently on server):
+  ❌ index-CSiyhuyU.js (or similar old hash)
+  ❌ Uses .split('?') pattern
+  ❌ Code: GET /api/outlets (no .php)
+  ❌ Result: 404 error
+
+New Build (in local dist/):
+  ✅ index-BFMQoUOQ.js (NEW hash)
+  ✅ Uses indexOf/substring pattern
+  ✅ Code: GET /api/outlets.php (with .php)
+  ✅ Result: 200 OK
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ VERIFICATION AFTER UPLOAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Success Indicators:
+  ✅ Page loads without 404 errors
+  ✅ Outlets dashboard visible
+  ✅ DevTools Network shows /api/outlets.php
+  ✅ Network status shows 200 OK
+  ✅ Authorization header present
+  ✅ Outlets data loads successfully
+
+If still broken:
+  ❌ Clear browser cache again (Ctrl+Shift+R)
+  ❌ Check FTP upload actually completed
+  ❌ Verify new dist/ folder is in public_html/
+  ❌ Verify hash is index-BFMQoUOQ.js (not old hash)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before Upload:
+  [ ] Have FTP credentials ready
+  [ ] Know path: /home3/a176229d/public_html/
+  [ ] Verify local dist/ exists and has new files
+
+Upload:
+  [ ] Connect to FTP server
+  [ ] Navigate to public_html/
+  [ ] Delete old dist/ folder
+  [ ] Upload new dist/ folder
+  [ ] Verify all 3 files uploaded (index.html + 2 assets)
+
+Verification:
+  [ ] Open salons.ansira.live/
+  [ ] Clear cache (Ctrl+Shift+R)
+  [ ] Open DevTools (F12)
+  [ ] Go to Network tab
+  [ ] Click on Outlets button
+  [ ] Check requests show /api/outlets.php
+  [ ] Check status is 200 OK
+  [ ] Data loads successfully
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 KEY POINT: 
+Upload new dist/ folder to fix the 404 errors.
+That's it. Simple as that.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Questions? The problem is clear:
+• Live server: OLD code → GET /api/outlets → 404
+• Local: NEW code → GET /api/outlets.php → 200
+• Solution: Upload new dist/
+
+Do it now. Should take 5 minutes total.

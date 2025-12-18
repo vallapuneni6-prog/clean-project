@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PackageTemplate, CustomerPackage, Outlet, User, SittingsPackage, CustomerSittingsPackage } from '../types';
 import { useNotification } from '../hooks/useNotification';
 import { NotificationContainer } from './NotificationContainer';
+import { fetchAPI } from '../api';
 
 interface PackagesProps {
     currentUser?: User;
@@ -51,44 +52,40 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
         try {
             setLoading(true);
 
-            const headers = {
-                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
-            };
-
-            const [templatesRes, packagesRes, outletsRes, sittingsTemplatesRes, sittingsPackagesRes] = await Promise.all([
-                fetch('/api/packages?type=templates', { headers }),
-                fetch('/api/packages?type=customer_packages', { headers }),
-                fetch('/api/outlets', { headers }),
-                fetch('/api/sittings-packages?type=templates', { headers }),
-                fetch('/api/sittings-packages?type=customer_packages', { headers })
+            const [templatesData, packagesData, outletsData, sittingsTemplatesData, sittingsPackagesData] = await Promise.all([
+                fetchAPI('/packages?type=templates'),
+                fetchAPI('/packages?type=customer_packages'),
+                fetchAPI('/outlets'),
+                fetchAPI('/sittings-packages?type=templates'),
+                fetchAPI('/sittings-packages?type=customer_packages')
             ]);
 
-            if (templatesRes.ok) {
-                 setTemplates(await templatesRes.json());
+            if (templatesData) {
+                 setTemplates(templatesData);
              }
 
-            if (packagesRes.ok) {
-                let packagesData = await packagesRes.json();
+            if (packagesData) {
+                let packagesDataFiltered = packagesData;
                 if (currentUser?.role === 'admin' && !isSuperAdmin) {
-                    packagesData = packagesData.filter((p: any) => adminOutletIds.includes(p.outletId));
+                    packagesDataFiltered = packagesData.filter((p: any) => adminOutletIds.includes(p.outletId));
                 }
-                setCustomerPackages(packagesData.map((p: any) => ({
+                setCustomerPackages(packagesDataFiltered.map((p: any) => ({
                     ...p,
                     assignedDate: new Date(p.assignedDate)
                 })));
             }
 
-            if (sittingsTemplatesRes.ok) {
-                 setSittingsTemplates(await sittingsTemplatesRes.json());
+            if (sittingsTemplatesData) {
+                 setSittingsTemplates(sittingsTemplatesData);
              }
 
-            if (sittingsPackagesRes.ok) {
-                let sittingsPackagesData = await sittingsPackagesRes.json();
-                console.log('Loaded sittings packages:', sittingsPackagesData);
+            if (sittingsPackagesData) {
+                let sittingsPackagesDataFiltered = sittingsPackagesData;
+                console.log('Loaded sittings packages:', sittingsPackagesDataFiltered);
                 if (currentUser?.role === 'admin' && !isSuperAdmin) {
-                    sittingsPackagesData = sittingsPackagesData.filter((p: any) => adminOutletIds.includes(p.outletId));
+                    sittingsPackagesDataFiltered = sittingsPackagesDataFiltered.filter((p: any) => adminOutletIds.includes(p.outletId));
                 }
-                const mappedData = sittingsPackagesData.map((p: any) => ({
+                const mappedData = sittingsPackagesDataFiltered.map((p: any) => ({
                     ...p,
                     assignedDate: new Date(p.assignedDate)
                 }));
@@ -96,12 +93,12 @@ export const Packages: React.FC<PackagesProps> = ({ currentUser }) => {
                 setCustomerSittingsPackages(mappedData);
             }
 
-            if (outletsRes.ok) {
-                let outletsData = await outletsRes.json();
+            if (outletsData) {
+                let outletsDataFiltered = outletsData;
                 if (currentUser?.role === 'admin' && !isSuperAdmin) {
-                    outletsData = outletsData.filter((o: Outlet) => adminOutletIds.includes(o.id));
+                    outletsDataFiltered = outletsData.filter((o: Outlet) => adminOutletIds.includes(o.id));
                 }
-                setOutlets(outletsData);
+                setOutlets(outletsDataFiltered);
             }
         } catch (error) {
             console.error('Failed to load packages:', error);

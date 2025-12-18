@@ -1,0 +1,172 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                  QUICK DEPLOYMENT GUIDE                                ║
+║              Salon Management System → BigRock Hosting                  ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+⏱️  ESTIMATED TIME: 10 minutes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 STEP 1: PREPARE FOR UPLOAD (2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Have FTP credentials ready:
+  Host: salons.ansira.live or BigRock FTP server
+  Username: a176229d
+  Password: [your password]
+
+✓ Local files to upload: dist/ folder (3 files total)
+  
+✓ Backup strategy: Consider renaming old dist/ to dist_backup/ 
+  (in case rollback needed)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 STEP 2: UPLOAD VIA FTP (5 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Using FileZilla or similar FTP client:
+
+1. Connect to BigRock server with credentials above
+
+2. Navigate to: /home3/a176229d/public_html/
+
+3. OPTION A - Delete & Upload (Recommended):
+   a) Right-click dist/ folder → Delete
+   b) Drag local dist/ folder into public_html/
+   c) Wait for upload to complete
+   d) Verify: Should see index-BFMQoUOQ.js (NEW HASH)
+
+4. OPTION B - Update Existing:
+   a) Open dist/ folder on server
+   b) Delete old index-*.js file
+   c) Upload new assets/ folder
+   d) Verify: New hash present
+
+Files uploaded should be:
+  ✓ dist/index.html
+  ✓ dist/assets/index-BFMQoUOQ.js  ← NEW (different hash)
+  ✓ dist/assets/index-D9GwlXY3.css  ← SAME
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ STEP 3: VERIFY .htaccess (1 minute)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In FTP client, right-click .htaccess in public_html/ → View/Edit
+
+Must contain these lines (CTRL+F to search):
+
+  "Authorization" ^(
+  RewriteCond %{REQUEST_URI} ^/api/
+
+If these lines are present → ✓ Good, no action needed
+If missing → Upload .htaccess from local project root
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 STEP 4: TEST IN BROWSER (2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Open browser → https://salons.ansira.live/
+
+2. Clear cache completely:
+   a) Press F12 (DevTools)
+   b) Go to Settings (gear icon)
+   c) Click "Clear cookies and cache data"
+   d) Close DevTools
+
+3. Hard refresh page:
+   Windows: Ctrl+Shift+R
+   Mac:     Cmd+Shift+R
+
+4. Login with valid credentials
+
+5. Click "Outlets" or any data section to load
+
+6. **VERIFY IN NETWORK TAB:**
+   a) Open DevTools → Network tab (F12)
+   b) Look for API requests (scroll down in Network tab)
+   c) You should see requests like:
+      GET /api/outlets.php ← (with .php extension)
+      Status: 200
+      
+   ✓ If you see "/api/outlets.php" with 200 status → SUCCESS!
+   ✗ If you see "/api/outlets" with 404 status → PROBLEM
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ DEPLOYMENT COMPLETE!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Expected behavior after deployment:
+  ✓ All pages load without 404 errors
+  ✓ API endpoints show /api/[endpoint].php in Network tab
+  ✓ Authorization headers present in requests
+  ✓ All data loads (outlets, packages, vouchers, etc.)
+  ✓ CRUD operations work (Create, Read, Update, Delete)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEM: Still seeing "/api/outlets" without .php
+Solution: 
+  → Check that dist/ folder was completely replaced
+  → Clear browser cache (Ctrl+Shift+R)
+  → Close and reopen browser
+
+PROBLEM: Getting 404 errors after upload
+Solution:
+  → Verify new dist/ folder exists on server
+  → Check that old dist/ was deleted
+  → Verify .htaccess exists and has API rules
+
+PROBLEM: Authorization header missing
+Solution:
+  → Check .htaccess has "Authorization" rules
+  → Login again to get fresh token
+  → Verify localStorage has 'authToken' key
+
+PROBLEM: Can't connect to FTP server
+Solution:
+  → Use BigRock cPanel instead:
+    1. Login to cPanel
+    2. File Manager → public_html/
+    3. Upload dist/ folder directly
+    4. Or delete dist/ and upload new one
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 MORE INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Detailed guides:
+  • DEPLOYMENT_FINAL.md - Complete deployment guide
+  • UPLOAD_CHECKLIST.txt - Step-by-step FTP instructions
+  • VALIDATE_BUILD.md - Technical build validation
+  • DEPLOYMENT_READY_FINAL.md - Executive summary
+
+Build information:
+  • Build hash: index-BFMQoUOQ.js
+  • Build status: ✅ READY FOR PRODUCTION
+  • All .php endpoints configured
+  • Authorization headers configured
+  • Session paths configured on backend
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ CHECKLIST - Mark as you go:
+
+[ ] Step 1: Prepare FTP credentials
+[ ] Step 2: Upload dist/ folder to public_html/
+[ ] Step 2: Verify new hash index-BFMQoUOQ.js is present
+[ ] Step 3: Verify .htaccess file is correct
+[ ] Step 4: Clear browser cache
+[ ] Step 4: Hard refresh page (Ctrl+Shift+R)
+[ ] Step 4: Login successfully
+[ ] Step 4: Check Network tab shows /api/outlets.php (with .php)
+[ ] ✅ DEPLOYMENT COMPLETE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

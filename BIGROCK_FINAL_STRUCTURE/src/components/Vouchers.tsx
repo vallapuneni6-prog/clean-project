@@ -3,6 +3,7 @@ import { Voucher, VoucherStatus, Outlet, User } from '../types';
 import html2canvas from 'html2canvas';
 import { useNotification } from '../hooks/useNotification';
 import { NotificationContainer } from './NotificationContainer';
+import { fetchAPI } from '../api';
 
 interface VouchersProps {
   currentUser?: User;
@@ -44,13 +45,13 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [vouchersRes, outletsRes] = await Promise.all([
-        fetch('/api/vouchers'),
-        fetch('/api/outlets')
+      const [vouchersData, outletsData] = await Promise.all([
+        fetchAPI('/vouchers'),
+        fetchAPI('/outlets')
       ]);
 
-      if (vouchersRes.ok) {
-        const data = await vouchersRes.json();
+      if (vouchersData) {
+        const data = vouchersData;
         setVouchers(data.map((v: any) => ({
           ...v,
           issueDate: new Date(v.issueDate),
@@ -59,8 +60,8 @@ export const Vouchers: React.FC<VouchersProps> = ({ currentUser }) => {
         })));
       }
 
-      if (outletsRes.ok) {
-        setOutlets(await outletsRes.json());
+      if (outletsData) {
+        setOutlets(outletsData);
       }
     } catch (error) {
       console.error('Failed to load vouchers:', error);

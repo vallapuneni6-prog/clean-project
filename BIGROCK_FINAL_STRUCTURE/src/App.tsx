@@ -15,7 +15,7 @@ import { Payroll } from './components/Payroll'
 import { Expenses } from './components/Expenses'
 import { ProfitAndLoss } from './components/ProfitAndLoss'
 import { Voucher, Outlet, CustomerPackage, VoucherStatus, User } from './types'
-import { getVouchers, getOutlets, getPackages } from './api'
+import { getVouchers, getOutlets, getPackages, fetchAPI } from './api'
 import './App.css'
 
 function App() {
@@ -42,13 +42,7 @@ function App() {
     
     if (token) {
       // Try to fetch user info from session-based auth endpoint
-      fetch('/api/user-info', {
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-        .then(res => res.json())
+      fetchAPI('/user-info')
         .then(data => {
           console.log('User info response:', data);
           if (data.id) {

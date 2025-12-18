@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Outlet } from '../types';
 import { getAuthHeaders } from '../utils/auth';
+import { fetchAPI } from '../api';
 
 interface UserExpense {
     id: string;
@@ -84,41 +85,36 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
                 return;
             }
 
-            const response = await fetch(`/api/expenses?outletId=${encodeURIComponent(userOutletId)}`, {
-                headers: getAuthHeaders()
-            });
+            const expenses = await fetchAPI<UserExpense[]>(`/expenses?outletId=${encodeURIComponent(userOutletId)}`).catch(() => []);
 
-            if (response.ok) {
-                const expenses = await response.json();
-                if (expenses.length > 0) {
-                    const dateToUse = selectedDate || new Date().toISOString().split('T')[0];
-                    const selectedDateTime = new Date(dateToUse).getTime();
-                    
-                    // Find the most recent expense before the selected date
-                    const previousExpense = expenses.find((exp: UserExpense) => {
-                        const expTime = new Date(exp.expenseDate).getTime();
-                        return expTime < selectedDateTime;
-                    });
-                    
-                    if (previousExpense) {
-                        // Found an expense on an earlier date, use its closing balance
-                        const closingBalance = parseFloat(previousExpense.closingBalance) || 0;
-                        setFormData(prevData => ({
-                            ...prevData,
-                            openingBalance: closingBalance
-                        }));
-                        console.log('Auto-populated opening balance from previous day:', closingBalance);
-                    } else {
-                        // No expense on earlier date, use the most recent expense's closing balance
-                        // This handles cases where creating multiple expenses on the same date
-                        const mostRecentExpense = expenses[0];
-                        const closingBalance = parseFloat(mostRecentExpense.closingBalance) || 0;
-                        setFormData(prevData => ({
-                            ...prevData,
-                            openingBalance: closingBalance
-                        }));
-                        console.log('Auto-populated opening balance from most recent expense:', closingBalance);
-                    }
+            if (expenses && expenses.length > 0) {
+                const dateToUse = selectedDate || new Date().toISOString().split('T')[0];
+                const selectedDateTime = new Date(dateToUse).getTime();
+                
+                // Find the most recent expense before the selected date
+                const previousExpense = expenses.find((exp: UserExpense) => {
+                    const expTime = new Date(exp.expenseDate).getTime();
+                    return expTime < selectedDateTime;
+                });
+                
+                if (previousExpense) {
+                    // Found an expense on an earlier date, use its closing balance
+                    const closingBalance = parseFloat(previousExpense.closingBalance) || 0;
+                    setFormData(prevData => ({
+                        ...prevData,
+                        openingBalance: closingBalance
+                    }));
+                    console.log('Auto-populated opening balance from previous day:', closingBalance);
+                } else {
+                    // No expense on earlier date, use the most recent expense's closing balance
+                    // This handles cases where creating multiple expenses on the same date
+                    const mostRecentExpense = expenses[0];
+                    const closingBalance = parseFloat(mostRecentExpense.closingBalance) || 0;
+                    setFormData(prevData => ({
+                        ...prevData,
+                        openingBalance: closingBalance
+                    }));
+                    console.log('Auto-populated opening balance from most recent expense:', closingBalance);
                 }
             }
         } catch (error) {
@@ -131,57 +127,22 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
         try {
             setLoading(true);
             // Use outlet ID if available, otherwise let backend determine from user's assigned outlets
-            const url = userOutletId 
-                ? `/api/expenses?outletId=${encodeURIComponent(userOutletId)}` 
-                : '/api/expenses';
-            console.log('Loading expenses from:', url);
+            const query = userOutletId 
+                ? `?outletId=${encodeURIComponent(userOutletId)}` 
+                : '';
+            console.log('Loading expenses from:', `/expenses${query}`);
             
-            const response = await fetch(url, {
-                headers: getAuthHeaders()
-            });
-            console.log('API Response status:', response.status);
+            const data = await fetchAPI<UserExpense[]>(`/expenses${query}`).catch(() => null);
             
-            if (response.ok) {
-                try {
-                    const text = await response.text();
-                    console.log('Response text length:', text.length);
-                    
-                    // Check if response starts with HTML
-                    if (text.trim().startsWith('<')) {
-                        console.error('API returned HTML instead of JSON:', text.substring(0, 200));
-                        showMessage('API returned invalid response. Check if database table exists. Try visiting /init-expenses-table.php', 'error');
-                        setExpenses([]);
-                        return;
-                    }
-                    
-                    const data = JSON.parse(text);
-                    console.log('Parsed JSON:', data);
-                    
-                    // Sort by date descending
-                    const sortedData = (Array.isArray(data) ? data : []).sort((a: any, b: any) =>
-                        new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime()
-                    );
-                    setExpenses(sortedData);
-                    console.log('Expenses loaded:', sortedData.length, 'records');
-                } catch (parseError) {
-                    console.error('JSON parse error:', parseError);
-                    console.error('Response status:', response.status);
-                    console.error('For debugging, visit: /debug-expenses-api.php');
-                    showMessage('Invalid response from server. Database table may not exist. Try visiting /init-expenses-table.php', 'error');
-                    setExpenses([]);
-                }
+            if (data) {
+                console.log('Expenses loaded:', data.length, 'records');
+                // Sort by date descending
+                const sortedData = data.sort((a: any, b: any) =>
+                    new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime()
+                );
+                setExpenses(sortedData);
             } else {
-                console.error('API error:', response.status, response.statusText);
-                try {
-                    const errorData = await response.json();
-                    console.error('Error data:', errorData);
-                    const errorMessage = errorData.error || errorData.message || 'Failed to load expenses';
-                    showMessage(errorMessage, 'error');
-                } catch (e) {
-                    const textError = await response.text();
-                    console.error('Error response text:', textError);
-                    showMessage('Failed to load expenses. Check browser console for details', 'error');
-                }
+                showMessage('Failed to load expenses. Try visiting /init-expenses-table.php', 'error');
                 setExpenses([]);
             }
         } catch (error) {
@@ -254,9 +215,8 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
         }
 
         try {
-            const response = await fetch('/api/expenses', {
+            await fetchAPI('/expenses', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({
                     outletId: userOutletId,
                     expenseDate: formData.expenseDate,
@@ -276,24 +236,19 @@ export const Expenses: React.FC<ExpensesProps> = ({ currentUser, outlets }) => {
                 }),
             });
 
-            if (response.ok) {
-                showMessage('Expense added successfully!', 'success');
-                setFormData({
-                    expenseDate: new Date().toISOString().split('T')[0],
-                    openingBalance: 0,
-                    cashReceivedToday: 0,
-                    expenseDescription: '',
-                    customDescription: '',
-                    expenseAmount: 0,
-                    cashDeposited: 0,
-                    closingBalance: 0,
-                });
-                setShowAddForm(false);
-                loadExpenses();
-            } else {
-                const errorData = await response.json();
-                showMessage(errorData.message || 'Failed to add expense', 'error');
-            }
+            showMessage('Expense added successfully!', 'success');
+            setFormData({
+                expenseDate: new Date().toISOString().split('T')[0],
+                openingBalance: 0,
+                cashReceivedToday: 0,
+                expenseDescription: '',
+                customDescription: '',
+                expenseAmount: 0,
+                cashDeposited: 0,
+                closingBalance: 0,
+            });
+            setShowAddForm(false);
+            loadExpenses();
         } catch (error) {
             console.error('Error adding expense:', error);
             showMessage('Error adding expense', 'error');
