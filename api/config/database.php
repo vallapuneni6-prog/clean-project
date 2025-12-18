@@ -29,15 +29,13 @@ if (file_exists($envFile)) {
 }
 
 // Database configuration
-// Use MySQL as primary database
+// Use MySQL (available on Laragon)
 define('DB_TYPE', 'mysql');
 define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
 define('DB_NAME', $_ENV['DB_NAME'] ?? 'ansira_db');
 define('DB_USER', $_ENV['DB_USER'] ?? 'root');
 define('DB_PASS', $_ENV['DB_PASS'] ?? '');
 define('DB_PORT', $_ENV['DB_PORT'] ?? 3306);
-// SQLite fallback (disabled)
-// define('DB_FILE', dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'database.sqlite');
 
 // Create database connection
 function getDBConnection() {

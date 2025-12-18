@@ -1,0 +1,23 @@
+# API Directory Configuration
+
+# Pass through all requests - let parent handle rewrites
+RewriteEngine Off
+<IfModule !mod_rewrite.c>
+    RewriteEngine Off
+</IfModule>
+
+# Enable Authorization Header
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# Disable directory listing
+Options -Indexes
+
+# Allow direct access to PHP files
+<FilesMatch "\.php$">
+    Require all granted
+</FilesMatch>
+
+# Block direct access to sensitive files
+<FilesMatch "\.(env|json|log|sql)$">
+    Require all denied
+</FilesMatch>

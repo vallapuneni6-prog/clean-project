@@ -10,17 +10,9 @@ export default defineConfig(({ mode }) => {
         host: '127.0.0.1',
         proxy: {
           '/api': {
-            target: 'http://localhost/clean-project/api',
+            target: 'http://localhost/clean-project',
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api/, ''),
-            ws: false,
-            bypass: (req, res, options) => {
-              // Log proxy requests for debugging
-              console.log('[PROXY] ' + req.method + ' ' + req.url);
-              if (req.headers.authorization) {
-                console.log('[PROXY] Authorization: ' + req.headers.authorization.substring(0, 30) + '...');
-              }
-            }
+            ws: false
           }
         }
       },

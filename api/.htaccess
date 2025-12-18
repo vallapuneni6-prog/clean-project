@@ -1,10 +1,10 @@
-# Allow PHP files in /api to execute directly
+# Disable rewriting in /api directory
 RewriteEngine Off
 
-# Disable directory listing
-Options -Indexes
-
-# Allow all requests to PHP files
+# Allow PHP execution
 <FilesMatch "\.php$">
     Allow from all
 </FilesMatch>
+
+# Disable directory listing
+Options -Indexes

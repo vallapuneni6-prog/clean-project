@@ -1,31 +1,37 @@
 <?php
+// Health check endpoint
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
 require_once 'config/database.php';
 
 try {
     $pdo = getDBConnection();
     
-    // Test database connection
-    $stmt = $pdo->query("SELECT 1");
+    // Simple database connectivity test
+    $stmt = $pdo->query("SELECT 1 as db_status");
     $result = $stmt->fetch();
     
-    if ($result) {
-        http_response_code(200);
-        echo json_encode([
-            'status' => 'ok',
-            'message' => 'Database connection successful',
-            'database' => DB_NAME,
-            'host' => DB_HOST
-        ]);
-    } else {
-        throw new Exception('Database query returned no result');
-    }
+    echo json_encode([
+        'status' => 'healthy',
+        'timestamp' => date('Y-m-d H:i:s'),
+        'database' => $result ? 'connected' : 'disconnected',
+        'server' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown'
+    ]);
+    
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
-        'status' => 'error',
-        'message' => $e->getMessage(),
-        'database' => DB_NAME,
-        'host' => DB_HOST
+        'status' => 'unhealthy',
+        'error' => $e->getMessage(),
+        'timestamp' => date('Y-m-d H:i:s')
     ]);
 }
 ?>

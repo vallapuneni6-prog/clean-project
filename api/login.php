@@ -16,9 +16,20 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// CORS headers for credential requests
+// CORS headers for credential requests - Allow both localhost and 127.0.0.1
+$allowed_origins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+];
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (in_array($origin, $allowed_origins)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+}
+
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: http://127.0.0.1:5173');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
@@ -146,3 +157,4 @@ try {
 } catch (Throwable $e) {
     sendError('Server error: ' . $e->getMessage(), 500);
 }
+?>

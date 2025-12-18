@@ -1,0 +1,256 @@
+================================================================================
+  BIGROCK DEPLOYMENT - QUICK START GUIDE
+================================================================================
+
+Project: Salon Management System
+Status: READY WITH CRITICAL FIXES NEEDED
+Time to Deploy: ~50 minutes
+
+================================================================================
+  ⚠️  CRITICAL TASKS (DO FIRST!)
+================================================================================
+
+[1] DELETE THESE FILES BEFORE UPLOADING
+    ✗ debug.php
+    ✗ test-db.php
+    ✗ api/debug-*.php (all 4 files)
+    ✗ api/diagnose-all.php
+    ✗ api/tables-check.php
+    ✗ api/check-*.php
+    ✗ api/setup-db.php
+    ✗ api/setup.html
+    ✗ api/database-init.html
+    ✗ api/*debug.log (all log files)
+
+[2] CONFIGURE .env FILE
+    DB_HOST=your-bigrock-db-host
+    DB_PORT=3306
+    DB_NAME=your_database_name
+    DB_USER=your_db_user
+    DB_PASSWORD=your_secure_password
+    JWT_SECRET=generate-a-secure-random-string-here
+
+[3] UPDATE api/config/database.php (lines 94-101)
+    Remove: http://localhost:*
+    Remove: http://127.0.0.1:*
+    Keep: https://your-domain.com
+    Keep: https://www.your-domain.com
+
+================================================================================
+  📋 DEPLOYMENT STEPS
+================================================================================
+
+STEP 1: Prepare Files (Local Machine)
+  [ ] Delete all debug files (see list above)
+  [ ] Edit .env file with production values
+  [ ] Update CORS origins in api/config/database.php
+  [ ] Verify .htaccess is present
+
+STEP 2: Upload to BigRock (15 min)
+  [ ] Connect via FTP/SFTP to public_html/
+  [ ] Upload all files EXCEPT deleted ones
+  [ ] Verify upload completed
+
+STEP 3: Create Database (10 min)
+  [ ] Login to BigRock cPanel
+  [ ] MySQL Databases → Create Database
+  [ ] Create User (from .env credentials)
+  [ ] Grant ALL privileges
+
+STEP 4: Import Schema (5 min)
+  [ ] Login to phpMyAdmin
+  [ ] Select your database
+  [ ] Import api/database/schema.sql
+  [ ] Verify tables created
+
+STEP 5: Set Permissions (5 min)
+  Via cPanel File Manager:
+  [ ] api/ → 755
+  [ ] assets/ → 755
+  [ ] dist/ → 755
+  [ ] public/ → 755
+  [ ] .env → 600 (IMPORTANT!)
+  [ ] *.php → 644
+  [ ] .htaccess → 644
+
+STEP 6: Test (10 min)
+  [ ] Open https://your-domain.com/
+  [ ] Check browser console (F12) → No errors
+  [ ] Test login functionality
+  [ ] Check Network tab → All assets load (200 status)
+  [ ] Test API endpoints
+
+STEP 7: Cleanup (Optional)
+  [ ] Delete test-db.php
+  [ ] Delete debug.php
+  [ ] Monitor error logs
+
+================================================================================
+  📁 FOLDER STRUCTURE TO UPLOAD
+================================================================================
+
+public_html/
+├── api/                    ✓ Upload (after cleanup)
+├── assets/                 ✓ Upload
+├── dist/                   ✓ Upload
+├── public/                 ✓ Upload
+├── .env                    ✓ Upload (update first!)
+├── .htaccess              ✓ Upload
+├── favicon.ico            ✓ Upload
+├── favicon.ico.php        ✓ Upload
+└── index.html             ✓ Upload
+
+DO NOT UPLOAD:
+  ✗ BIGROCK_FINAL_STRUCTURE.zip
+  ✗ .git/
+  ✗ node_modules/
+  ✗ src/
+  ✗ DEPLOYMENT_*.md (for reference only)
+
+================================================================================
+  🔒 SECURITY CHECKLIST
+================================================================================
+
+Before Upload:
+  [✓] All debug files deleted
+  [✓] JWT_SECRET set in .env
+  [✓] No localhost URLs in code
+  [✓] CORS domains updated
+  [✓] No node_modules/ folder included
+
+After Upload:
+  [✓] .env permissions set to 600
+  [✓] HTTPS enabled on domain
+  [✓] Database imports successful
+  [✓] No 404 errors in browser
+  [✓] No error logs publicly accessible
+  [✓] Login works correctly
+
+================================================================================
+  🚀 QUICK COMMAND REFERENCE
+================================================================================
+
+DELETE DEBUG FILES (PowerShell):
+  Remove-Item "api\debug-*.php", "api\diagnose-*.php", 
+    "api\tables-check.php", "api\check-*.php", 
+    "api\setup*", "debug.php", "test-db.php" -Force
+
+DELETE DEBUG FILES (Linux/Mac):
+  rm -f api/debug-*.php api/diagnose-*.php api/tables-check.php
+  rm -f api/check-*.php api/setup-*.php api/setup.html debug.php test-db.php
+
+GENERATE RANDOM JWT SECRET (Linux/Mac):
+  openssl rand -base64 32
+
+GENERATE RANDOM JWT SECRET (PowerShell):
+  [System.Convert]::ToBase64String([byte[]]@((32..126) | Get-Random -Count 32))
+
+================================================================================
+  🔧 BIGROCK FILE MANAGER - SET PERMISSIONS
+================================================================================
+
+Via BigRock cPanel:
+
+1. Right-click folder → Change Permissions
+   Directories: 755
+   Files: 644
+
+2. Special: .env file
+   Right-click → Change Permissions → 600
+
+Verify:
+  .env should show: -rw------- (600)
+  Files should show: -rw-r--r-- (644)
+  Dirs should show: drwxr-xr-x (755)
+
+================================================================================
+  ⚠️  TROUBLESHOOTING
+================================================================================
+
+PROBLEM: 500 Error after upload
+  FIX: 1) Check .env is correctly configured
+       2) Run test-db.php to diagnose
+       3) Check BigRock error logs
+
+PROBLEM: CSS/JS not loading (404)
+  FIX: 1) Verify dist/assets/ folder exists
+       2) Check .htaccess is uploaded
+       3) Clear browser cache (Ctrl+Shift+Delete)
+
+PROBLEM: CORS error in console
+  FIX: Update api/config/database.php line 94-101
+       Add your domain to allowed origins
+
+PROBLEM: Login not working
+  FIX: 1) Check JWT_SECRET is set in .env
+       2) Verify database tables exist
+       3) Check Authorization header in .htaccess
+
+PROBLEM: Database connection fails
+  FIX: 1) Verify credentials in .env
+       2) Check database exists in phpMyAdmin
+       3) Check user has proper permissions
+       4) Run test-db.php for diagnosis
+
+================================================================================
+  📞 NEED HELP?
+================================================================================
+
+BigRock Support: https://www.bigrock.in/support
+cPanel Access: https://cpanel.your-domain.com:2083
+phpMyAdmin: Database management (via cPanel)
+Error Logs: cPanel > Logs > Error Log
+
+For detailed instructions, see:
+  - DEPLOYMENT_SUMMARY.md (overview)
+  - DEPLOYMENT_CHECKLIST.md (detailed checklist)
+  - PREPARE_DEPLOYMENT.md (step-by-step guide)
+
+================================================================================
+  ✅ DEPLOYMENT CHECKLIST
+================================================================================
+
+PREPARE (5 min):
+  [ ] Delete debug files
+  [ ] Update .env
+  [ ] Update CORS origins
+  Total: 5 minutes
+
+UPLOAD (15 min):
+  [ ] FTP to BigRock
+  [ ] Upload all files
+  [ ] Verify upload
+  Total: 15 minutes
+
+DATABASE (15 min):
+  [ ] Create database
+  [ ] Create user
+  [ ] Import schema.sql
+  [ ] Verify tables
+  Total: 15 minutes
+
+CONFIGURE (5 min):
+  [ ] Set file permissions
+  [ ] Verify .env (600)
+  [ ] Check structure
+  Total: 5 minutes
+
+TEST (10 min):
+  [ ] Test website loads
+  [ ] Check console
+  [ ] Test login
+  [ ] Test API
+  Total: 10 minutes
+
+TOTAL TIME: ~50 minutes
+
+================================================================================
+
+STATUS: READY TO DEPLOY (after fixes)
+
+Next Action: Read PREPARE_DEPLOYMENT.md for step-by-step guide
+
+================================================================================
+Generated: December 2024
+Project: Salon Management System - BigRock Deployment
+================================================================================
